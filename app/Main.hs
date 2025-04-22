@@ -8,7 +8,7 @@ import Turtle
 import ColorTurtle
 import Turtle3D
 import TwistedTurtle
-
+import Instances
 
 [carrefour| 
 data AllTurtle s <- Turtle s | ColorTurtle s | Turtle3D s | TwistedTurtle _Self 

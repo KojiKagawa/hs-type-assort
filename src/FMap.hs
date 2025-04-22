@@ -31,7 +31,6 @@ fmapIO qt = do
     Just Nothing -> putStrLn "identity"
     Just (Just f1) -> putStrLn $ pprint f1
 
-
 -- fmap, contramap, -- c.f.) https://hackage.haskell.org/package/thorn-0.2/docs/Data-Thorn.html
 -- ここのは簡易版 
 mkFMap :: Name -> Type -> Exp -> Q (Maybe (Maybe Exp))
@@ -43,7 +42,8 @@ mkFMap :: Name -> Type -> Exp -> Q (Maybe (Maybe Exp))
 -- Just (Just e): fmap は e
 mkFMap n (VarT m) inj = if n == m then pure $ Just (Just inj) else pure $ Just Nothing
 -- [], Maybe, ->, (,), (,,),     Either, ST, SR, IO, STRef, IORef などに対応する
-mkFMap n (ConT m) inj = pure $ Just Nothing
+-- Todo: SR, IO, STRef, IORef, Solo, ContT _ Identity
+mkFMap n (ConT m) inj = pure $ Just Nothing -- m == ''Int, ''Bool, ''Char, ''Double, ''Text, ''ByteString, ''Word8, ''Word16, ''Word32, ''Word64
 mkFMap n (AppT ListT t) inj = do
   fmap1 <- mkFMap n t inj
   case fmap1 of
@@ -52,7 +52,8 @@ mkFMap n (AppT ListT t) inj = do
     Just (Just e1) -> do
       ret <- [| map $(pure e1) |]
       pure $ Just $ Just ret
-mkFMap n (AppT (ConT maybeName) t) inj | maybeName == ''Maybe = do
+mkFMap n ty@(AppT (ConT maybeName) t) inj 
+  | maybeName == ''Maybe = do
   fmap1 <- mkFMap n t inj
   case fmap1 of
     Nothing -> pure Nothing
@@ -60,6 +61,7 @@ mkFMap n (AppT (ConT maybeName) t) inj | maybeName == ''Maybe = do
     Just (Just e1) -> do
       ret <- [| map $(pure e1) |]
       pure $ Just $ Just ret
+  | otherwise = fail ("mkFMap: not supported type" ++ pprint ty ++ " (" ++ show ty ++")")
 mkFMap n (TupleT 0) inj = pure $ Just Nothing
 mkFMap n (AppT (AppT (TupleT 2) t1) t2) inj = do
   fmap1 <- mkFMap n t1 inj

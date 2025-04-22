@@ -14,27 +14,20 @@ import Language.Haskell.TH.Quote
 import FMap
 import SimpleParser (parseCarrefourDec)
 import MyTypeLib
+import Data.List (nub, (\\))
 
-getInstanceInfo :: Type -> Type -> Q ()
-getInstanceInfo d c = do
-  (ConT n, ts) <- typeFArgs c
-  -- runIO $ print n
-  -- runIO $ print d
-  let ts1 = map (substType [(mkName "_Self", d)]) ts
-  insts <- reifyInstances n ts1
-  -- runIO $ print insts
-  runIO $ putStrLn $ pprint insts
 
-getClassInfo :: Type -> Q Dec
+
+getClassInfo :: Type -> Q (Name, [Dec])
 getClassInfo c = do
   (ConT n, ts) <- typeFArgs c
   ClassI (ClassD cxt _ tvs deps ms) _ <- reify n  -- instance info is not necessary here.
   let subst = map getNameTyVar tvs `zip` ts
   let ms1 = map (substSig subst) ms
-  let cxt1 = map (substType subst) cxt
-  let ret = ClassD cxt1 n tvs [{-deps-}] ms1 -- Todo: substitute tvs
-  runIO $ putStrLn $ pprint ret
-  pure ret
+  -- let cxt1 = map (substType subst) cxt
+  -- let ret = ClassD cxt1 n tvs [{-deps-}] ms1 
+  -- runIO $ putStrLn $ pprint ms1
+  pure(n, ms1)
 
 mkNames :: Int -> String -> [Name]
 mkNames n s = map (mkName . (s ++) . show) [1..n]
@@ -45,7 +38,9 @@ defineAllData tyconName tvs conNames ds = do
         -> NormalC n [(Bang NoSourceUnpackedness NoSourceStrictness, t)]) conNames ds
   let dec = DataD [] tyconName tvs Nothing conDecls []
   runIO $ putStrLn $ pprint dec
+  -- Todo: to 関数の定義とインスタンス宣言を作る
   pure [dec]
+
 
 -- Self -> Self -> t    ===> (2, t)
 -- Self -> Self -> Self -> t ===> (3, t)
@@ -78,22 +73,52 @@ applyFMap (Just Nothing) e = pure e
 applyFMap (Just (Just e)) e1 = pure $ AppE e e1
 
 defineMethod :: Type -> [Name] -> Dec -> Q [Dec]
-defineMethod typ cs (SigD n t) = do
+defineMethod typ cstrs (SigD n t) = do
   let (num1, t1) = countSelfArgs (mkName "_Self") t
   fmapFn <- mkFMap (mkName "_Self") t1 (VarE $ mkName "inj")
   ret <- applyFMap fmapFn $ foldl AppE (VarE n) (map VarE (mkNames num1 "x"))
-  let pats = mkPatterns num1 cs
+  let pats = mkPatterns num1 cstrs
       ds = map (\ ps -> FunD n [Clause ps {- Body -}(NormalB ret) [{-Dec-}]]) pats
   -- runIO $ putStrLn $ pprint ds
   pure ds
-defineMethod _ _ _ = pure []
+defineMethod _ _ _  = pure []
 
-defineInstance :: Type -> [Name] -> Dec -> Q [Dec]
-defineInstance typ cs (ClassD cxt n tvs deps ms) = do
-  decs <- mapM lookIntoMethod ms
+-- temporary
+getInstanceCxt :: Type -> Type -> Q Cxt
+getInstanceCxt d c = do
+  (ConT n, ts) <- typeFArgs c
+  -- runIO $ print n
+  -- runIO $ print d
+  -- Todo: binary method に対応するため _Self1, _Self2, ... のすべての組み合わせを考える
+  let ts1 = map (substType [(mkName "_Self", d)]) ts
+      c1  = foldl AppT (ConT n) ts1
+  insts <- reifyInstances n ts1
+  -- runIO $ print insts
+  -- runIO $ putStrLn $ show c ++ ", " ++ show c1
+  -- runIO $ putStrLn $ pprint insts
+  case insts of
+    [] -> fail $ "getInstanceCxt: no instance for " ++ pprint c1
+    [InstanceD Nothing cxt t decs]  -> do 
+      s <- unifyType t c1
+      pure $ map (substType s) cxt
+    other -> pure $ [c1] -- Overlapping している場合、元の Pred を使う
+
+defineInstance :: Type -> [Type] -> [Name] -> [Type] -> (Type, (Name, [Dec])) -> Q [Dec]
+defineInstance typ cs cstrs ds (c, (n, ms)) = do
+  -- decs <- mapM lookIntoMethod ms
   -- runIO $ putStrLn $ pprint $ concat decs
-  mdecs <- mapM (defineMethod typ cs) ms
-  let ret = InstanceD Nothing [{- Todo: Cxt -}] (AppT (ConT n) typ) (concat mdecs)
+  -- Todo: _Self1, _Self2, ... のすべての組み合わせを考える
+  -- 考え方 _Self が一種類のとき（binary method がないとき）
+  --          _Self にすべての型を当てはめる
+  --       _Self が複数のとき（binary method 以上があるとき）
+  --          _Self1, _Self2, ... というように、独立な型変数に附番する
+  --          従属な型変数は、_Self を使う
+  --          インスタンスは _Self1, _Self2, ... に対してすべての組み合わせを考える
+  cxtss <- mapM (flip getInstanceCxt c) ds
+  mdecs <- mapM (defineMethod typ cstrs) ms
+  let s = [(mkName "_Self", typ)]
+      cxts = nub (map (substType s) (concat cxtss)) \\ cs
+      ret = InstanceD Nothing cxts (substType s c) (concat mdecs)
   runIO $ putStrLn $ pprint ret
   pure [ret]
 
@@ -102,24 +127,39 @@ typeCarrefour typ ds cs = do
   (n, tvs) <- dataHead typ
   let nBase = nameBase n
   let tyconName = mkName nBase
-  let conNames  = mkNames (length ds) nBase
-  dataDec <- defineAllData tyconName tvs conNames
-                          (map (substType [(mkName "_Self", typ)]) ds)
-  let dcs =  [(d0, c0) | d0 <- ds, c0 <- cs]
-  runIO $ putStrLn "---- getInstanceInfo"
-  mapM_ (uncurry getInstanceInfo) dcs
-  runIO $ putStrLn "---- getClassInfo"
+  let consts  = mkNames (length ds) nBase
+  let s = [(mkName "_Self", typ)]
+  let ds1 = map (substType s) ds
+  runIO $ putStrLn "---- defineAllData"
+  dataDec <- defineAllData tyconName tvs consts ds1 
+  -- runIO $ putStrLn "---- getClassInfo"
   cis <- mapM getClassInfo cs
   runIO $ putStrLn "---- defineInstance"
-  mapM_ (defineInstance typ conNames) cis
+  let cs1 = map (substType s) cs
+  mapM_ (defineInstance typ cs1 consts ds) $ zip cs cis
   pure dataDec
+
+replaceConst :: Type -> Q Type
+replaceConst (ConT n) = do
+  mn <- lookupTypeName $ nameBase n
+  case mn of
+    Just n1 -> pure $ ConT n1
+    _ -> pure $ ConT n
+replaceConst (AppT t1 t2) = do
+  t1' <- replaceConst t1
+  t2' <- replaceConst t2
+  pure $ AppT t1' t2'
+replaceConst t  = pure t
 
 carrefourDec :: String -> Q [Dec]
 carrefourDec s = do
   loc <- TH.location
   let pos = (TH.loc_filename loc, fst (TH.loc_start loc), snd (TH.loc_start loc))
   (t, ds, cs) <- parseCarrefourDec pos s
-  typeCarrefour t ds cs
+  t1 <- replaceConst t
+  ds1 <- mapM replaceConst ds 
+  cs1 <- mapM replaceConst cs
+  typeCarrefour t1 ds1 cs1
   -- runIO $ print dec
   pure []
 

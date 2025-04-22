@@ -33,7 +33,8 @@ varid = try (lexeme $ do
 
 atypeParser :: Parser Type
 atypeParser =
-           do { c <- conid; pure $ ConT $ mkName c }
+           do { c <- conid; 
+                pure $ ConT $ mkName c }
        <|> do { v <- varid; pure $ VarT $ mkName v }
        <|> do { symbol "["; t <- typeParser; symbol "]"; pure $ AppT ListT t }
        <|> do { symbol "("

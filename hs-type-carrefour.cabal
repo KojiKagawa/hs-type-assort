@@ -74,7 +74,10 @@ executable hs-type-carrefour
 
     -- Modules included in this executable, other than Main.
     other-modules:    ColorTurtle
-                    , Turtle, Turtle3D, TwistedTurtle
+                    , Turtle
+                    , Turtle3D
+                    , TwistedTurtle
+                    , Instances
 
     -- LANGUAGE extensions used by modules in this package.
     other-extensions:

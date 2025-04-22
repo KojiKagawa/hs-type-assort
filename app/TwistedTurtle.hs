@@ -8,8 +8,7 @@ import Turtle
 import ColorTurtle
 import Turtle3D
 
-newtype TwistedTurtle self=
-     TwistedTurtle self
+newtype TwistedTurtle self = TwistedTurtle self
 
 instance TurtleLike self s => TurtleLike (TwistedTurtle self) s where
     forward (TwistedTurtle t) = forward t
