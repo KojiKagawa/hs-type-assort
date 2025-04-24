@@ -1,6 +1,9 @@
 ﻿{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# LANGUAGE TemplateHaskellQuotes #-}
 {-# HLINT ignore "Avoid lambda using `infix`" #-}
 {-# HLINT ignore "Use <$>" #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Carrefour where
 
@@ -16,7 +19,11 @@ import SimpleParser (parseCarrefourDec)
 import MyTypeLib
 import Data.List (nub, (\\))
 
+class Cast a b where
+  cast :: a -> b
 
+instance Cast a a where
+  cast = id
 
 getClassInfo :: Type -> Q (Name, [Dec])
 getClassInfo c = do
@@ -32,15 +39,53 @@ getClassInfo c = do
 mkNames :: Int -> String -> [Name]
 mkNames n s = map (mkName . (s ++) . show) [1..n]
 
-defineAllData :: Name -> [TyVarBndr ()] -> [Name] -> [Type] -> Q [Dec]
+defineToDecl tyconName tvs conNames ds = let 
+    toNameL = mkName $ "To" ++ nameBase tyconName
+    toNameS = mkName $ "to" ++ nameBase tyconName  
+    self    = mkName "_self"
+    selfv   = PlainTV self ()
+    ty      = foldl AppT (ConT tyconName) (map VarT tvs)
+    classDecl = ClassD [] toNameL (selfv : map (\ v -> PlainTV v ()) tvs) 
+                       [] [SigD toNameS (ArrowT `AppT` VarT self `AppT` ty)]
+    instDecls = zipWith (\ n t ->
+         InstanceD Nothing [] (foldl AppT (ConT toNameL) (t : map VarT tvs)) 
+                   [ValD (VarP toNameS) (NormalB (ConE n)) []]) conNames ds
+    a = mkName "a"
+    b = mkName "b"
+    eiDecl =  InstanceD Nothing 
+                  [foldl AppT (ConT toNameL) (map VarT (a : tvs)), foldl AppT (ConT toNameL) (map VarT (b : tvs))] 
+                  (foldl AppT (ConT toNameL) (ConT ''Either `AppT` VarT a `AppT` VarT b : map VarT tvs)) 
+                  [ValD (VarP toNameS) (NormalB (VarE 'either `AppE` VarE toNameS `AppE` VarE toNameS)) []]
+    castDecl = InstanceD Nothing [foldl AppT (ConT toNameL) (VarT a : map VarT tvs)] 
+                        (foldl AppT (ConT ''Cast) [VarT a, ty]) 
+                        [FunD 'cast [Clause [VarP self] (NormalB (VarE toNameS `AppE` VarE self)) []]]
+  in classDecl : eiDecl : castDecl: instDecls
+
+defineFromDecl tyconName tvs conNames ds = let
+    fromNameL = mkName $ "From" ++ nameBase tyconName
+    fromNameS = mkName $ "from" ++ nameBase tyconName
+    self    = mkName "_self"
+    selfv   = PlainTV self ()
+    ty      = foldl AppT (ConT tyconName) (map VarT tvs)
+    classDecl = ClassD [] fromNameL (selfv : map (\ v -> PlainTV v ()) tvs) [] [SigD fromNameS (ArrowT `AppT` ty `AppT` (ConT ''Maybe `AppT` VarT self))]
+    instDecls = zipWith (\ n t ->
+        let x = mkName "x" in
+          InstanceD Nothing [] (foldl AppT (ConT fromNameL) (t : map VarT tvs)) [FunD fromNameS [ Clause [ConP n [] [VarP x]] (NormalB (ConE 'Just `AppE` VarE x)) []
+                                                                                                , Clause [WildP] (NormalB (ConE 'Nothing)) [] ]]) conNames ds
+  in classDecl : instDecls
+
+defineAllData :: Name -> [Name] -> [Name] -> [Type] -> Q [Dec]
 defineAllData tyconName tvs conNames ds = do
   let conDecls = zipWith (\ n t
         -> NormalC n [(Bang NoSourceUnpackedness NoSourceStrictness, t)]) conNames ds
-  let dec = DataD [] tyconName tvs Nothing conDecls []
-  runIO $ putStrLn $ pprint dec
+  let dec = DataD [] tyconName (map (\ v -> PlainTV v ()) tvs) Nothing conDecls []
+  -- runIO $ putStrLn $ pprint dec
   -- Todo: to 関数の定義とインスタンス宣言を作る
-  pure [dec]
-
+      toDecls   = defineToDecl tyconName tvs conNames ds
+      fromDecls = defineFromDecl tyconName tvs conNames ds
+      ret = dec : toDecls ++ fromDecls
+  runIO $ putStrLn $ pprint ret
+  pure ret
 
 -- Self -> Self -> t    ===> (2, t)
 -- Self -> Self -> Self -> t ===> (3, t)

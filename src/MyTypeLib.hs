@@ -18,11 +18,11 @@ typeToList typ = do
     else fail "typeToList: not a tuple"
   pure $ n : ts
 
-dataHead :: Type -> Q (Name, [TyVarBndr ()])
+dataHead :: Type -> Q (Name, [Name])
 dataHead typ = do
   (ConT n, ts) <- typeFArgs typ
   let tvs = map (\ (VarT n) -> n) ts
-  pure (n, map (`PlainTV` ()) tvs)
+  pure (n, tvs)
 
 substType :: [(Name, Type)] -> Type -> Type
 substType env (VarT n) = case lookup n env of
