@@ -18,6 +18,7 @@ import FMap
 import SimpleParser (parseCarrefourDec)
 import MyTypeLib
 import Data.List (nub, (\\))
+import Data.Maybe (catMaybes)
 
 class Cast a b where
   cast :: a -> b
@@ -46,7 +47,7 @@ defineToDecl tyconName tvs conNames ds = let
     selfv   = PlainTV self ()
     ty      = foldl AppT (ConT tyconName) (map VarT tvs)
     classDecl = ClassD [] toNameL (selfv : map (\ v -> PlainTV v ()) tvs) 
-                       [] [SigD toNameS (ArrowT `AppT` VarT self `AppT` ty)]
+                       [FunDep [self] tvs] [SigD toNameS (ArrowT `AppT` VarT self `AppT` ty)]
     instDecls = zipWith (\ n t ->
          InstanceD Nothing [] (foldl AppT (ConT toNameL) (t : map VarT tvs)) 
                    [ValD (VarP toNameS) (NormalB (ConE n)) []]) conNames ds
@@ -67,11 +68,14 @@ defineFromDecl tyconName tvs conNames ds = let
     self    = mkName "_self"
     selfv   = PlainTV self ()
     ty      = foldl AppT (ConT tyconName) (map VarT tvs)
-    classDecl = ClassD [] fromNameL (selfv : map (\ v -> PlainTV v ()) tvs) [] [SigD fromNameS (ArrowT `AppT` ty `AppT` (ConT ''Maybe `AppT` VarT self))]
+    classDecl = ClassD [] fromNameL (selfv : map (\ v -> PlainTV v ()) tvs)
+                       [FunDep [self] tvs]
+                       [SigD fromNameS (ArrowT `AppT` ty `AppT` (ConT ''Maybe `AppT` VarT self))]
     instDecls = zipWith (\ n t ->
         let x = mkName "x" in
-          InstanceD Nothing [] (foldl AppT (ConT fromNameL) (t : map VarT tvs)) [FunD fromNameS [ Clause [ConP n [] [VarP x]] (NormalB (ConE 'Just `AppE` VarE x)) []
-                                                                                                , Clause [WildP] (NormalB (ConE 'Nothing)) [] ]]) conNames ds
+          InstanceD Nothing [] (foldl AppT (ConT fromNameL) (t : map VarT tvs))
+                    [FunD fromNameS [ Clause [ConP n [] [VarP x]] (NormalB (ConE 'Just `AppE` VarE x)) []
+                                    , Clause [WildP] (NormalB (ConE 'Nothing)) [] ]]) conNames ds
   in classDecl : instDecls
 
 defineAllData :: Name -> [Name] -> [Name] -> [Type] -> Q [Dec]
@@ -103,6 +107,7 @@ lookIntoMethod (SigD n t) = do
   pure []
 lookIntoMethod _ = fail "lookIntoMethod: not a signature declaration"
 
+-- mkPatterns n ["C1", "C2", ...] = 
 mkPatterns :: Int -> [Name] -> [[Pat]]
 mkPatterns n cs = aux n n cs
   where
@@ -117,16 +122,16 @@ applyFMap Nothing _ = fail "applyFMap: cannot define fmap"
 applyFMap (Just Nothing) e = pure e
 applyFMap (Just (Just e)) e1 = pure $ AppE e e1
 
-defineMethod :: Type -> [Name] -> Dec -> Q [Dec]
+defineMethod :: Type -> [Name] -> Dec -> Q (Maybe Dec)
 defineMethod typ cstrs (SigD n t) = do
   let (num1, t1) = countSelfArgs (mkName "_Self") t
   fmapFn <- mkFMap (mkName "_Self") t1 (VarE $ mkName "inj")
   ret <- applyFMap fmapFn $ foldl AppE (VarE n) (map VarE (mkNames num1 "x"))
   let pats = mkPatterns num1 cstrs
-      ds = map (\ ps -> FunD n [Clause ps {- Body -}(NormalB ret) [{-Dec-}]]) pats
+      ds = map (\ ps -> Clause ps {- Body -}(NormalB ret) [{-Dec-}]) pats
   -- runIO $ putStrLn $ pprint ds
-  pure ds
-defineMethod _ _ _  = pure []
+  pure $ Just (FunD n ds)
+defineMethod _ _ _  = pure Nothing
 
 -- temporary
 getInstanceCxt :: Type -> Type -> Q Cxt
@@ -163,7 +168,7 @@ defineInstance typ cs cstrs ds (c, (n, ms)) = do
   mdecs <- mapM (defineMethod typ cstrs) ms
   let s = [(mkName "_Self", typ)]
       cxts = nub (map (substType s) (concat cxtss)) \\ cs
-      ret = InstanceD Nothing cxts (substType s c) (concat mdecs)
+      ret = InstanceD Nothing cxts (substType s c) (catMaybes mdecs)
   runIO $ putStrLn $ pprint ret
   pure [ret]
 
@@ -181,8 +186,8 @@ typeCarrefour typ ds cs = do
   cis <- mapM getClassInfo cs
   runIO $ putStrLn "---- defineInstance"
   let cs1 = map (substType s) cs
-  mapM_ (defineInstance typ cs1 consts ds) $ zip cs cis
-  pure dataDec
+  insts <- mapM (defineInstance typ cs1 consts ds) $ zip cs cis
+  pure (dataDec ++ concat insts)
 
 replaceConst :: Type -> Q Type
 replaceConst (ConT n) = do
@@ -204,9 +209,8 @@ carrefourDec s = do
   t1 <- replaceConst t
   ds1 <- mapM replaceConst ds 
   cs1 <- mapM replaceConst cs
-  typeCarrefour t1 ds1 cs1
-  -- runIO $ print dec
-  pure []
+  ret <- typeCarrefour t1 ds1 cs1
+  pure ret
 
 -- for test only
 carrefourExp :: String -> Q Exp
