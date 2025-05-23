@@ -32,8 +32,6 @@ getClassInfo c = do
   ClassI (ClassD cxt _ tvs deps ms) _ <- reify n  -- instance info is not necessary here.
   let subst = map getNameTyVar tvs `zip` ts
   let ms1 = map (substSig subst) ms
-  -- let cxt1 = map (substType subst) cxt
-  -- let ret = ClassD cxt1 n tvs [{-deps-}] ms1 
   -- runIO $ putStrLn $ pprint ms1
   pure(n, ms1)
 
@@ -84,11 +82,10 @@ defineAllData tyconName tvs conNames ds = do
         -> NormalC n [(Bang NoSourceUnpackedness NoSourceStrictness, t)]) conNames ds
   let dec = DataD [] tyconName (map (\ v -> PlainTV v ()) tvs) Nothing conDecls []
   -- runIO $ putStrLn $ pprint dec
-  -- Todo: to 関数の定義とインスタンス宣言を作る
       toDecls   = defineToDecl tyconName tvs conNames ds
       fromDecls = defineFromDecl tyconName tvs conNames ds
       ret = dec : toDecls ++ fromDecls
-  runIO $ putStrLn $ pprint ret
+--  runIO $ putStrLn $ pprint ret
   pure ret
 
 -- Self -> Self -> t    ===> (2, t)
@@ -99,6 +96,7 @@ countSelfArgs n (AppT (AppT ArrowT (VarT m)) t2)
     | otherwise = (0, AppT (AppT ArrowT (VarT m)) t2)
 countSelfArgs _ t = (0, t)
 
+{-
 lookIntoMethod :: Dec -> Q [Dec]
 lookIntoMethod (SigD n t) = do
   runIO $ putStr $ pprint n
@@ -106,6 +104,7 @@ lookIntoMethod (SigD n t) = do
   runIO $ putStrLn $ pprint t
   pure []
 lookIntoMethod _ = fail "lookIntoMethod: not a signature declaration"
+-}
 
 -- mkPatterns n ["C1", "C2", ...] = 
 mkPatterns :: Int -> [Name] -> [[Pat]]
@@ -157,7 +156,7 @@ defineInstance :: Type -> [Type] -> [Name] -> [Type] -> (Type, (Name, [Dec])) ->
 defineInstance typ cs cstrs ds (c, (n, ms)) = do
   -- decs <- mapM lookIntoMethod ms
   -- runIO $ putStrLn $ pprint $ concat decs
-  -- Todo: _Self1, _Self2, ... のすべての組み合わせを考える
+  -- _Self1, _Self2, ... のすべての組み合わせを考える
   -- 考え方 _Self が一種類のとき（binary method がないとき）
   --          _Self にすべての型を当てはめる
   --       _Self が複数のとき（binary method 以上があるとき）
@@ -169,7 +168,7 @@ defineInstance typ cs cstrs ds (c, (n, ms)) = do
   let s = [(mkName "_Self", typ)]
       cxts = nub (map (substType s) (concat cxtss)) \\ cs
       ret = InstanceD Nothing cxts (substType s c) (catMaybes mdecs)
-  runIO $ putStrLn $ pprint ret
+--  runIO $ putStrLn $ pprint ret
   pure [ret]
 
 typeCarrefour :: Type -> [Type] -> [Type] -> Q [Dec]
@@ -180,11 +179,11 @@ typeCarrefour typ ds cs = do
   let consts  = mkNames (length ds) nBase
   let s = [(mkName "_Self", typ)]
   let ds1 = map (substType s) ds
-  runIO $ putStrLn "---- defineAllData"
+--  runIO $ putStrLn "---- defineAllData"
   dataDec <- defineAllData tyconName tvs consts ds1 
-  -- runIO $ putStrLn "---- getClassInfo"
+--  -- runIO $ putStrLn "---- getClassInfo"
   cis <- mapM getClassInfo cs
-  runIO $ putStrLn "---- defineInstance"
+--  runIO $ putStrLn "---- defineInstance"
   let cs1 = map (substType s) cs
   insts <- mapM (defineInstance typ cs1 consts ds) $ zip cs cis
   pure (dataDec ++ concat insts)

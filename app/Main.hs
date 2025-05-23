@@ -3,6 +3,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 module Main where
 
 import Carrefour( carrefour, Cast, cast)
@@ -91,6 +93,14 @@ main = stToIO (do
   t2 <- newSTRef 0.0
   c2 <- newSTRef 0x00ff0000
   let turtle2 = ColorTurtle x2 y2 t2 c2
+--      turtle3 :: Cast (ColorTurtle RealWorld) self0 => TwistedTurtle self0
       turtle3 = TwistedTurtle ((id :: AllTurtle s -> AllTurtle s) (cast turtle2))
       turtles = (id :: [AllTurtle s] -> [AllTurtle s]) [cast turtle1, cast turtle2, cast turtle3]
   mapM_ (\ t -> forward t 3.3) turtles)
+
+{-
+  want to deduce
+      self0 = AllTurtle RealWorld
+  from   
+      (ToAllTurtle (TwistedTurtle self0) RealWorld, (Cast (ColorTurtle RealWorld) self0))
+-}
