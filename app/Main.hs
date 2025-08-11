@@ -15,6 +15,13 @@ import Turtle3D
 import TwistedTurtle
 import Instances
 
+
+import Exp
+import PPrint
+import Times
+import TimesPPrint
+import PickExp
+
 import Control.Monad.ST
 import Data.STRef
 import Data.Either
@@ -82,7 +89,7 @@ instance ColorTurtle.HasColor (AllTurtle s) s
            setColor (AllTurtle3 x1) = setColor x1;}
 -}
 
-main = stToIO (do
+main1 = stToIO (do
   -- putStrLn [carrefour| x |]
   x1 <- newSTRef 0.0
   y1 <- newSTRef 1.0
@@ -104,3 +111,28 @@ main = stToIO (do
   from   
       (ToAllTurtle (TwistedTurtle self0) RealWorld, (Cast (ColorTurtle RealWorld) self0))
 -}
+
+
+[carrefour| 
+data AllExp <- Lit | Plus _Self _Self | Times _Self _Self
+    deriving (Eval _Self, PPrint _Self, Pick0 _Self _Self __Self) 
+|]
+
+{-
+-- 以下の書き方でも可
+[carrefour| 
+data AllExp <- Lit | Plus AllExp AllExp | Times AllExp AllExp
+    deriving (Eval AllExp, PPrint AllExp, Pick0 AllExp AllExp __Self) 
+|]
+-}
+
+main2 = let cast = toAllExp
+            exps :: [ AllExp ]
+            exps = [ cast (Lit 1.2)
+                   , cast (Plus (cast (Lit 3.4)) (cast (Lit 7.8)))
+                   , cast (Times (cast (Lit 0.6)) (cast (Plus (cast (Lit (- 1.2))) (cast (Lit 3.09))))) ]
+            output =  concat $ map pprint exps
+          in print output
+
+main = do main1
+          main2

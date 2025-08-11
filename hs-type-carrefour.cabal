@@ -78,6 +78,7 @@ executable hs-type-carrefour
                     , Turtle3D
                     , TwistedTurtle
                     , Instances
+                    , Exp, PPrint, Times, TimesPPrint, PickExp
 
     -- LANGUAGE extensions used by modules in this package.
     other-extensions:

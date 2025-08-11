@@ -18,14 +18,14 @@ symbol name  = lexeme (string name)
 keywords = ["data", "deriving"]
 conid = try (lexeme $ do
   c <- upper
-  cs0 <- many (letter <|> digit)
+  cs0 <- many (letter <|> digit <|> char '_')
   let cs = c:cs0
   if cs `elem` keywords
      then fail ("reserved word: " ++ cs)
      else pure cs)
 varid = try (lexeme $ do
   c <- lower <|> char '_'
-  cs0 <- many (letter <|> digit)
+  cs0 <- many (letter <|> digit <|> char '_')
   let cs = c:cs0
   if cs `elem` keywords
      then fail ("reserved word: " ++ cs)

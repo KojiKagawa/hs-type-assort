@@ -24,6 +24,24 @@ dataHead typ = do
   let tvs = map (\ (VarT n) -> n) ts
   pure (n, tvs)
 
+replaceType :: [(Type, Type)] -> Type -> Type
+replaceType env t = case lookup t env of
+  Just t' -> t'
+  Nothing -> case t of
+    AppT t1 t2 -> AppT (replaceType env t1) (replaceType env t2)
+    InfixT t1 n t2 -> InfixT (replaceType env t1) n (replaceType env t2)
+    VarT n -> VarT n
+    ConT n -> ConT n
+    TupleT n -> TupleT n
+    ListT -> ListT
+    ArrowT -> ArrowT
+    _ -> t  -- 他のコンストラクタは使われないはず
+
+replaceDec :: [(Type, Type)] -> Dec -> Dec
+replaceDec env (SigD n t) = SigD n (replaceType env t)
+replaceDec _ d            = d
+
+
 substType :: [(Name, Type)] -> Type -> Type
 substType env (VarT n) = case lookup n env of
   Just t  -> t
