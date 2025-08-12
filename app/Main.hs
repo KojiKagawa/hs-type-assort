@@ -15,7 +15,6 @@ import Turtle3D
 import TwistedTurtle
 import Instances
 
-
 import Exp
 import PPrint
 import Times
@@ -115,14 +114,14 @@ main1 = stToIO (do
 
 [carrefour| 
 data AllExp <- Lit | Plus _Self _Self | Times _Self _Self
-    deriving (Eval _Self, PPrint _Self, Pick0 _Self _Self __Self) 
+    deriving (Eval _Self, PPrint _Self, Pick0 _Self _Self _Self) 
 |]
 
 {-
 -- 以下の書き方でも可
 [carrefour| 
 data AllExp <- Lit | Plus AllExp AllExp | Times AllExp AllExp
-    deriving (Eval AllExp, PPrint AllExp, Pick0 AllExp AllExp __Self) 
+    deriving (Eval AllExp, PPrint AllExp, Pick0 AllExp AllExp _Self) 
 |]
 -}
 

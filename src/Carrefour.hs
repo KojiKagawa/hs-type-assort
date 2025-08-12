@@ -8,18 +8,19 @@
 
 module Carrefour where
 
--- https://hackage.haskell.org/package/template-haskell-2.19.0.0/docs/Language-Haskell-TH.html
+-- https://hackage.haskell.org/package/template-haskell-2.20.0.0/docs/Language-Haskell-TH.html
 import Language.Haskell.TH as TH
--- https://hackage.haskell.org/package/template-haskell-2.19.0.0/docs/Language-Haskell-TH-Syntax.html
+-- https://hackage.haskell.org/package/template-haskell-2.20.0.0/docs/Language-Haskell-TH-Syntax.html
 import Language.Haskell.TH.Syntax
--- https://hackage.haskell.org/package/template-haskell-2.19.0.0/docs/Language-Haskell-TH-Quote.html
+-- https://hackage.haskell.org/package/template-haskell-2.20.0.0/docs/Language-Haskell-TH-Quote.html
 import Language.Haskell.TH.Quote
 
 import FMap
 import SimpleParser (parseCarrefourDec)
 import MyTypeLib
 import Data.List (nub, (\\))
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, mapMaybe)
+import Control.Monad (zipWithM)
 
 class Cast a b where
   cast :: a -> b
@@ -180,9 +181,8 @@ applyFMap Nothing _ = fail "applyFMap: cannot define fmap"
 applyFMap (Just Nothing) e = pure e
 applyFMap (Just (Just e)) e1 = pure $ AppE e e1
 
-
 -- defineMethod nm cstrs (SigD n t)
---  nm:      data constructor name, e.g. AllTurtle 
+--  nm:     data constructor name, e.g. AllTurtle 
 --  cstrs:  data constructor names, e.g. ["C1", "C2", ...]
 --  (SigD n t):  method signature, e.g. foo :: _Self -> _Self -> _Self
 --  return: a method definition for all the combinations of data constructors
@@ -192,14 +192,43 @@ applyFMap (Just (Just e)) e1 = pure $ AppE e e1
 defineMethod :: String -> [Name] -> Dec -> Q (Maybe Dec)
 defineMethod nBase cstrs (SigD n t) = do
   let (num1, t1) = countSelfArgs (mkName "_Self") t
-      sb = [(mkName "__Self", VarT $ mkName "_Self")] -- ここでだけ __Self と _Self を同一視
-  fmapFn <- mkFMap (mkName "_Self") (substType sb t1) (VarE $ mkName ("to" ++ nBase))
+      {- sb = [ (mkName "__Self", VarT $ mkName "_Self") ] -} -- ここでだけ __Self と _Self を同一視
+  fmapFn <- mkFMap (mkName "_Self") ({- substType sb -} t1) (VarE $ mkName ("to" ++ nBase))
   ret <- applyFMap fmapFn $ foldl AppE (VarE n) (map VarE (mkNames num1 "x"))
   let pats = mkPatterns num1 cstrs
       ds = map (\ ps -> Clause ps {- Body -}(NormalB ret) [{-Dec-}]) pats
   -- runIO $ putStrLn $ pprint ds
   pure $ Just (FunD n ds)
 defineMethod _ _ _  = pure Nothing
+
+-- クラス n から他に依存している型変数を取得する
+getDependentParams :: Name -> Q [Bool]
+getDependentParams n = do
+  ClassI (ClassD _ _ tvs deps _) _ <- reify n
+  let ds = loop deps []
+  pure $ map (\ tv -> tyVarName tv `elem` ds) tvs
+    -- loop deps acc
+    --   deps:  functional dependencies, e.g. [FunDep [a] [b, c], FunDep [b] [c]]
+    --   acc:   accumulated dependent parameters
+    --   return: a list of dependent parameters
+    --   The function finds all the dependent parameters recursively.
+    --   e.g. FunDep [a] [b, c] and FunDep [b] [c] will return [a, b, c]
+  where
+    tyVarName (PlainTV n _)    = n
+    tyVarName (KindedTV n _ _) = n
+    dependentParams deps = concatMap (\ (FunDep _ ns) -> ns) deps 
+                            \\ concatMap(\ (FunDep as _) -> as) deps
+    removeParam ns (FunDep as rs)  = 
+      let rs' = rs \\ ns
+        in if null rs' then Nothing 
+                       else Just (FunDep as rs')
+    removeDependentParams ns = mapMaybe (removeParam ns)
+    loop deps acc = let
+      ds = dependentParams deps
+      in if null ds then acc
+         else
+          let deps' = removeDependentParams ds deps
+            in loop deps' (acc ++ ds)
 
 -- getInstanceContext d c
 --   d:  type expression, e.g. TwistedTurtle _Self
@@ -208,10 +237,16 @@ defineMethod _ _ _  = pure Nothing
 getInstanceContext :: Type -> Type -> Q Cxt
 getInstanceContext d c = do
   (ConT n, ts) <- typeFArgs c
+  flags <- getDependentParams n 
   -- runIO $ print n
   -- runIO $ print d
-  let ts1 = map (substType [(mkName "_Self", d)]) ts -- ここでは __Self と _Self を同一視しない
-      c1  = foldl AppT (ConT n) ts1
+  ts1 <- zipWithM (\ flag t -> if flag then do 
+                                              n <- newName "__s"
+                                              pure $ substType [(mkName "_Self", VarT n)] t
+                                            -- 依存している型変数の中の Self は新しい型変数に置き換える
+                                       else pure $ substType [(mkName "_Self", d)] t) 
+                    flags ts -- ここでは __Self と _Self を同一視しない
+  let c1  = foldl AppT (ConT n) ts1
   insts <- reifyInstances n ts1
   -- runIO $ print insts
   -- runIO $ putStrLn $ show c ++ ", " ++ show c1
@@ -251,10 +286,10 @@ defineInstance typ nBase cs cstrs ds (c, ms) = do
   -- d や cs, ms の中で _Self の代わりに型名（e.g. AllTurtle s）が使われても対応できるようにする
   -- Todo: constructor class （e.g. Functor AllTurtle）のように、unsaturated の場合にも対応できるように
   let rev = [(typ, VarT $ mkName "_Self")]
+      s = [(mkName "_Self", typ), (mkName "__Self", typ)]
   cxtss <- mapM (flip getInstanceContext (replaceType rev c) . replaceType rev) ds
   mdecs <- mapM (defineMethod nBase cstrs) ms
-  let s = [(mkName "_Self", typ), (mkName "__Self", typ)]
-      cxts = nub (map (substType s) (concat cxtss)) \\ cs
+  let cxts = nub (map (substType s) (concat cxtss)) \\ cs
       ret = InstanceD Nothing cxts (substType s c) (catMaybes mdecs)
 --  runIO $ putStrLn $ pprint ret
   pure ret
@@ -296,7 +331,6 @@ replaceConst (AppT t1 t2) = do
   t2' <- replaceConst t2
   pure $ AppT t1' t2'
 replaceConst t  = pure t
-
 
 -- e.g. 
 -- [carrefour| 
