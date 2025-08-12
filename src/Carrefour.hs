@@ -286,7 +286,7 @@ defineInstance typ nBase cs cstrs ds (c, ms) = do
   -- d や cs, ms の中で _Self の代わりに型名（e.g. AllTurtle s）が使われても対応できるようにする
   -- Todo: constructor class （e.g. Functor AllTurtle）のように、unsaturated の場合にも対応できるように
   let rev = [(typ, VarT $ mkName "_Self")]
-      s = [(mkName "_Self", typ), (mkName "__Self", typ)]
+      s = [(mkName "_Self", typ){- , (mkName "__Self", typ) -}]
   cxtss <- mapM (flip getInstanceContext (replaceType rev c) . replaceType rev) ds
   mdecs <- mapM (defineMethod nBase cstrs) ms
   let cxts = nub (map (substType s) (concat cxtss)) \\ cs
