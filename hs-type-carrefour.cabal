@@ -56,11 +56,12 @@ library
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    -- GHC 9.4.8, LTS Haskell 21.25
-    build-depends:    base ^>=4.17.2.1,
-                        haskell-src-meta ^>= 0.8.13,
-                        haskell-src ^>= 1.0.4,
-                        template-haskell ^>= 2.19.0.0,
+    -- -- GHC 9.4.8, LTS Haskell 21.25
+    -- GHC 9.6.7, LTS Haskell 22.44
+    build-depends:    base ^>=4.18.3.0,
+                        haskell-src-meta ^>= 0.8.15,
+                        haskell-src ^>= 1.0.4.1,
+                        template-haskell ^>= 2.20.0.0,
                         parsec ^>= 3.1.16.1
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -87,7 +88,7 @@ executable hs-type-carrefour
         , NamedFieldPuns
     -- Other library packages from which modules are imported.
     build-depends:
-        base ^>=4.17.2.1,
+        base ^>=4.18.3.0,
         hs-type-carrefour
 
     -- Directories containing source files.
@@ -110,6 +111,6 @@ test-suite hs-type-carrefour-test
     main-is:          MyLibTest.hs
 
     -- Test dependencies.
-    build-depends:    base ^>=4.17.2.1
+    build-depends:    base ^>=4.18.3.0
                     , hs-type-carrefour
-                    , template-haskell ^>= 2.19.0.0
+                    , template-haskell ^>= 2.20.0.0
