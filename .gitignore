@@ -1,3 +1,4 @@
 *.exe
 *.hi
 dist-newstyle
+debug.log
