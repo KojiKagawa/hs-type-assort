@@ -48,6 +48,7 @@ library
     -- Modules exported by the library.
     exposed-modules: Carrefour
                    , FMap
+                   , DefaultingPlugin
 
     -- Modules included in this library but not exported.
     other-modules: SimpleParser
@@ -62,7 +63,8 @@ library
                         haskell-src-meta ^>= 0.8.15,
                         haskell-src ^>= 1.0.4.1,
                         template-haskell ^>= 2.20.0.0,
-                        parsec ^>= 3.1.16.1
+                        parsec ^>= 3.1.16.1,
+                        ghc ^>= 9.6.7
     -- Directories containing source files.
     hs-source-dirs:   src
 

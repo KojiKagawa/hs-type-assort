@@ -5,6 +5,9 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+
+{-# OPTIONS -fplugin DefaultingPlugin #-}
+
 module Main where
 
 import Carrefour( carrefour, Cast, cast)
@@ -133,5 +136,6 @@ main2 = let cast = toAllExp
             output =  concat $ map pprint exps
           in print output
 
-main = do main1
+main = do let a = let x = read "False" in show $ not x
+          main1
           main2
