@@ -44,9 +44,12 @@ defaultingP _ = Just $ GHC.Tc.Types.DefaultingPlugin {
 }
 
 findProposal :: [Ct] -> TcPluginM [DefaultingProposal]
+-- よくわからないが Ct には ambiguity に関する型変数を含む Constraint しか含まれていないようだ
+-- Todo: 上記を確認する
 findProposal simples = do
     -- Implement your proposal finding logic here
     let preds = map ctPred simples
+    tcPluginIO $ printSDocLn defaultSDocContext (PageMode False) stdout (ppr preds)
     return []
 
 -- install :: [CommandLineOption] -> [CoreToDo] -> [CoreToDo]

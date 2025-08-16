@@ -128,14 +128,38 @@ data AllExp <- Lit | Plus AllExp AllExp | Times AllExp AllExp
 |]
 -}
 
-main2 = let cast = toAllExp
-            exps :: [ AllExp ]
-            exps = [ cast (Lit 1.2)
-                   , cast (Plus (cast (Lit 3.4)) (cast (Lit 7.8)))
-                   , cast (Times (cast (Lit 0.6)) (cast (Plus (cast (Lit (- 1.2))) (cast (Lit 3.09))))) ]
+instance FromLit AllExp where
+    fromLit = cast
+
+instance FromPlus AllExp where
+    fromPlus = cast
+
+instance FromTimes AllExp where
+    fromTimes = cast
+
+main2 = let -- cast = toAllExp
+            cast' = toAllExp
+-- csat' = cast にすると 
+-- Cast (Plus AllExp AllExp) a, Cast (Times AllExp AllExp) a, Cast Lit a
+-- が WantedConstraints に含まれなくなる
+-- Todo: 上記の原因を調査する
+-- Todo: cast ではなく Source を固定した castLit, castPlus などを定義して
+--       それらを使うようにする
+            -- cast' = cast
+            -- exps :: [ AllExp ]
+            -- exps = [ cast (Lit 1.2)
+            --        , cast (Plus (cast' (Lit 3.4)) (cast' (Lit 7.8)))
+            --        , cast (Times (cast' (Lit 0.6)) (cast' (Plus (cast' (Lit (- 1.2))) (cast' (Lit 3.09))))) ]
+            exps = [ fromLit (Lit 1.2)
+                   , fromPlus (Plus (fromLit (Lit 3.4)) (fromLit (Lit 7.8)))
+                   , fromTimes (Times (fromLit (Lit 0.6)) (fromPlus (Plus (fromLit (Lit (- 1.2))) (fromLit (Lit 3.09))))) ]
             output =  concat $ map pprint exps
           in print output
 
-main = do let a = let x = read "False" in show $ not x
-          main1
+-- foo a = let x = read "False"
+--           in show [(x, a), (x, read "True")]
+-- main3 = putStrLn $ foo False
+
+main = do main1
           main2
+          -- main3
