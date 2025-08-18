@@ -185,7 +185,7 @@ tyVarName (KindedTV n _ _) = n
 
 defineCastInstance :: CastClass -> Name -> [Name] -> Name -> Type -> Q Dec
 defineCastInstance (CastFrom fcName) tyconName tvs conName t = do
-  (ClassI (ClassD _ _ tvs' _ [SigD fmname mt']) _) <- reify fcName
+  (ClassI (ClassD _ _ tvs' _ [SigD fmName mt']) _) <- reify fcName
   -- t -> tyconName tvs と mt を unify して、その結果を tvs' に適用する
   -- また tvs' に tyconName が出現しないことを確認する
   -- その tvs' がインスタンス宣言のパラメーターになる
@@ -196,19 +196,34 @@ defineCastInstance (CastFrom fcName) tyconName tvs conName t = do
   let vs = map (substType s) tvs1
   self <- newName "_self"
   let finstDecl = InstanceD Nothing [] (foldl AppT (ConT fcName) vs) [
-              FunD (methodName fcName) [
+              FunD fmName [
                   Clause [VarP self] (NormalB (ConE conName `AppE` VarE self)) []
               ]
           ]
       {-
       tinstDecl = InstanceD Nothing [] (foldl AppT (ConT tcName) (VarT self: vs)) [
-              FunD (methodName tcName) [
+              FunD tmName [
                   Clause [ConP conName [] [VarP self]] (NormalB (ConE 'Just `AppE` VarE self)) []
                 , Clause [WildP] (NormalB (ConE 'Nothing)) [] 
               ]
           ]
       -}
   return finstDecl
+defineCastInstance (CastTo tcName) tyconName tvs conName t = do
+  (ClassI (ClassD _ _ tvs' _ [SigD tmName mt']) _) <- reify tcName
+  let mt = AppT (AppT ArrowT (foldl AppT (ConT tyconName) (map VarT tvs))) (ConT ''Maybe `AppT` t) 
+  mt1 : tvs1 <- refreshFvsList (mt' : map (\ b -> VarT (tyVarName b)) tvs')
+  -- Todo: match に失敗したら、失敗を処理する
+  s <- matchType mt1 mt
+  let vs = map (substType s) tvs1
+  self <- newName "_self"
+  let tinstDecl = InstanceD Nothing [] (foldl AppT (ConT tcName) vs) [
+              FunD tmName [
+                  Clause [ConP conName [] [VarP self]] (NormalB (ConE 'Just `AppE` VarE self)) []
+                , Clause [WildP] (NormalB (ConE 'Nothing)) [] 
+              ]
+          ]
+  return tinstDecl
 
 -- defineCastDecl 
 defineCastDecl :: Name -> [Name] -> Name -> Type -> Q [Dec]
