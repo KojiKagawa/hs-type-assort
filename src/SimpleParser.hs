@@ -40,11 +40,9 @@ atypeParser =
        <|> do { symbol "("
               ; ts <- sepBy1 typeParser (symbol ",")
               ; symbol ")"
-              ; let len = length ts
-              ; if len == 1 then
-                    pure $ head ts
-                else
-                    pure $ foldl AppT (TupleT (length ts)) ts
+              ; case ts of
+                  [t] -> pure t
+                  _   -> pure $ foldl AppT (TupleT (length ts)) ts
               }
 
 typeParser :: Parser Type

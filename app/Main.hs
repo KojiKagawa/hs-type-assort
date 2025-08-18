@@ -138,8 +138,8 @@ instance FromTimes AllExp where
     fromTimes = cast
 
 main2 = let -- cast = toAllExp
-            cast' = toAllExp
--- csat' = cast にすると 
+            -- cast' = toAllExp
+-- cast' = cast にすると 
 -- Cast (Plus AllExp AllExp) a, Cast (Times AllExp AllExp) a, Cast Lit a
 -- が WantedConstraints に含まれなくなる
 -- Todo: 上記の原因を調査する

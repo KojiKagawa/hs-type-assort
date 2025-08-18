@@ -4,6 +4,7 @@
 {-# HLINT ignore "Use <$>" #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# HLINT ignore "Use section" #-}
 
 module Carrefour where
@@ -18,7 +19,9 @@ import Language.Haskell.TH.Quote
 import FMap
 import SimpleParser (parseCarrefourDec)
 import MyTypeLib
+import Data.Char (toLower)
 import Data.List (nub, (\\))
+import Data.Data (Data)
 import Data.Maybe (catMaybes, mapMaybe)
 import Control.Monad (zipWithM)
 
@@ -28,16 +31,19 @@ class Cast a b where
 instance Cast a a where
   cast = id
 
+data CastClass = CastFrom Name | CastTo Name 
+                 deriving (Show, Data)
+
 -- getMethodTypes t
 --   t: a type class constraint
 --   return: [Dec]
 --   --   [Dec]:  types of methods (type vars are replaced with the type args in *t*)
 getMethodTypes :: Type -> Q [Dec]
 getMethodTypes c = do
-  (ConT n, ts) <- typeFArgs c
+  let (ConT n, ts) = typeFArgs c
   ClassI (ClassD cxt _ tvs deps ms) _ <- reify n  -- instance info is not necessary here.
   let subst = map getNameTyVar tvs `zip` ts
-  let ms1 = map (substSig subst) ms
+      ms1 = map (substSig subst) ms
   -- runIO $ putStrLn $ pprint ms1
   pure ms1
 
@@ -74,9 +80,9 @@ defineToDecls tyconName tvs conNames ds = let
     toNameL = mkName $ "To" ++ nameBase tyconName
     toNameS = mkName $ "to" ++ nameBase tyconName
     self    = mkName "_self"
-    selfv   = PlainTV self ()
+    selfv   = PlainTV self BndrReq
     ty      = foldl AppT (ConT tyconName) (map VarT tvs)
-    classDecl = ClassD [] toNameL (selfv : map (\ v -> PlainTV v ()) tvs)
+    classDecl = ClassD [] toNameL (selfv : map (\ v -> PlainTV v BndrReq) tvs)
                        [FunDep [self] tvs] [SigD toNameS (ArrowT `AppT` VarT self `AppT` ty)]
     instDecls = zipWith (\ n t ->
          InstanceD Nothing [] (foldl AppT (ConT toNameL) (t : map VarT tvs))
@@ -113,9 +119,9 @@ defineFromDecls tyconName tvs conNames ds = let
     fromNameL = mkName $ "From" ++ nameBase tyconName
     fromNameS = mkName $ "from" ++ nameBase tyconName
     self    = mkName "_self"
-    selfv   = PlainTV self ()
+    selfv   = PlainTV self BndrReq
     ty      = foldl AppT (ConT tyconName) (map VarT tvs)
-    classDecl = ClassD [] fromNameL (selfv : map (\ v -> PlainTV v ()) tvs)
+    classDecl = ClassD [] fromNameL (selfv : map (\ v -> PlainTV v BndrReq) tvs)
                        [FunDep [self] tvs]
                        [SigD fromNameS (ArrowT `AppT` ty `AppT` (ConT ''Maybe `AppT` VarT self))]
     instDecls = zipWith (\ n t ->
@@ -124,6 +130,92 @@ defineFromDecls tyconName tvs conNames ds = let
                     [FunD fromNameS [ Clause [ConP n [] [VarP x]] (NormalB (ConE 'Just `AppE` VarE x)) []
                                     , Clause [WildP] (NormalB (ConE 'Nothing)) [] ]]) conNames ds
   in classDecl : instDecls
+
+{-
+-- Self 型を考慮に入れる必要がある
+defineCastClass' :: Name -> Int -> [Dec]
+defineCastClass' n nArgs =
+    let self    = mkName "_self"
+        selfv   = PlainTV self BndrReq
+        n0 = nameBase n
+        fcStr  = "From" ++ n0
+        fmStr  = "from" ++ n0
+        fcName = mkName fcStr
+        fmName = mkName fmStr
+        vs0 = map (\ i -> PlainTV (mkName ("s" ++ show i)) BndrReq) [1..nArgs]
+        vs = map (\ i -> VarT $ mkName ("s" ++ show i)) [1..nArgs]
+        t = foldl AppT (ConT n) vs
+        fDecl = ClassD [] fcName (selfv : vs0) [] [
+                SigD fmName (AppT (AppT ArrowT t) (VarT self))
+            ]
+        tcStr = "To" ++ n0
+        tmStr = "to" ++ n0
+        tcName = mkName tcStr
+        tmName = mkName tmStr
+        tDecl = ClassD [] tcName (selfv : vs0) [] [
+                SigD tmName (AppT (AppT ArrowT (VarT self)) (ConT ''Maybe `AppT` t))
+            ]
+        fcExp = VarE 'mkName `AppE` LitE (StringL fcStr)
+        tcExp = VarE 'mkName `AppE` LitE (StringL tcStr)
+        annDecl = PragmaD (AnnP (TypeAnnotation n) (AppE (AppE (ConE ''CastClass) fcExp) tcExp))
+      in [fDecl, tDecl, annDecl]
+
+defineCastClass :: Name -> Q [Dec]
+defineCastClass n = do
+    info <- reify n
+    case info of
+      TyConI (DataD _ _ vs _ _ _) -> do
+        let nArgs = length vs
+        pure $ defineCastClass' n nArgs
+      TyConI (NewtypeD _ _ vs _ _ _) -> do
+        let nArgs = length vs  -- Newtype has only one constructor
+        pure $ defineCastClass' n nArgs
+      _ -> pure []
+-}
+
+methodName :: Name -> Name
+methodName n = mkName $ methodName' (nameBase n)
+  where
+    methodName' "" = ""
+    methodName' (x:xs) = toLower x : xs
+
+defineCastInstance :: CastClass -> Name -> [Name] -> Name -> Type -> [Dec]
+defineCastInstance (CastFrom fcName) tyconName tvs conName t =
+  let (_, vs) = typeFArgs t
+      self = mkName "_self"
+      finstDecl = InstanceD Nothing [] (foldl AppT (ConT fcName) (VarT self : vs)) [
+              FunD (methodName fcName) [
+                  Clause [VarP self] (NormalB (ConE conName `AppE` VarE self)) []
+              ]
+          ]
+      {-
+      tinstDecl = InstanceD Nothing [] (foldl AppT (ConT tcName) (VarT self: vs)) [
+              FunD (methodName tcName) [
+                  Clause [ConP conName [] [VarP self]] (NormalB (ConE 'Just `AppE` VarE self)) []
+                , Clause [WildP] (NormalB (ConE 'Nothing)) [] 
+              ]
+          ]
+      -}
+    in [finstDecl]
+
+-- defineCastDecl 
+defineCastDecl :: Name -> [Name] -> Name -> Type -> Q [Dec]
+defineCastDecl tyconName tvs conName t = do
+  let (ConT n, vs) = typeFArgs t
+  cs <- ((reifyAnnotations (AnnLookupName n)) :: Q [CastClass])
+  -- let (decls, cs') = case cs of
+  --       [] -> let classDecls = defineCastClass' n (length vs)
+  --                 fcName = mkName $ "From" ++ nameBase n
+  --                 tcName = mkName $ "To" ++ nameBase n
+  --               in (classDecls, [CastClass { from = fcName, to = tcName }])
+  --       cs -> ([], cs)
+  let ds = concatMap (\ c -> defineCastInstance c tyconName tvs conName t) cs
+  pure ds
+  
+defineCastDecls :: Name -> [Name] -> [Name] -> [Type] -> Q [Dec]
+defineCastDecls tyconName tvs conNames ds = do
+   dss <- zipWithM (defineCastDecl tyconName tvs) conNames ds
+   return $ concat dss
 
 -- defineAllSumData tyconName tvs conNames ds
 --   tyconName:  type constructor name, e.g. AllTurtle
@@ -134,13 +226,14 @@ defineAllSumData :: Name -> [Name] -> [Name] -> [Type] -> Q [Dec]
 defineAllSumData tyconName tvs conNames ds = do
   let conDecls = zipWith (\ n t
         -> NormalC n [(Bang NoSourceUnpackedness NoSourceStrictness, t)]) conNames ds
-  let dec = DataD [] tyconName (map (\ v -> PlainTV v ()) tvs) Nothing conDecls []
+  let dec = DataD [] tyconName (map (\ v -> PlainTV v BndrReq) tvs) Nothing conDecls []
   -- runIO $ putStrLn $ pprint dec
       toDecls   = defineToDecls tyconName tvs conNames ds
       fromDecls = defineFromDecls tyconName tvs conNames ds
       ret = dec : toDecls ++ fromDecls
 --  runIO $ putStrLn $ pprint ret
-  pure ret
+  casts <- defineCastDecls tyconName tvs conNames ds
+  pure (ret ++ casts)
 
 -- countSelfArgs n t
 --   n:  name of the type variable for Self, e.g. "_Self"
@@ -236,11 +329,11 @@ getDependentParams n = do
 --   return: Cxt (e.g. [Pred]) for the class constraint, e.g. [TurtleLike _Self s]
 getInstanceContext :: Type -> Type -> Q Cxt
 getInstanceContext d c = do
-  (ConT n, ts) <- typeFArgs c
+  let (ConT n, ts) = typeFArgs c
   flags <- getDependentParams n 
   -- runIO $ print n
   -- runIO $ print d
-  ts1 <- zipWithM (\ flag t -> if flag then do 
+  ts1 <- zipWithM (\ flag t -> if flag then do
                                               n <- newName "__s"
                                               pure $ substType [(mkName "_Self", VarT n)] t
                                             -- 依存している型変数の中の Self は新しい型変数に置き換える
@@ -302,13 +395,13 @@ defineInstance typ nBase cs cstrs ds (c, ms) = do
 --   return: [Dec] for the type, data constructors, and class instances
 typeCarrefour :: Type -> [Type] -> [Type] -> Q [Dec]
 typeCarrefour typ ds cs = do
-  (n, tvs) <- dataHead typ
-  let nBase = nameBase n
-  let tyconName = mkName nBase
-  let consts  = mkNames (length ds) nBase
-  let s = [(mkName "_Self", typ)]
-  let rev = [(typ, VarT $ mkName "_Self")]
-  let ds1 = map (substType s) ds
+  let (n, tvs) = dataHead typ
+      nBase = nameBase n
+      tyconName = mkName nBase
+      consts  = mkNames (length ds) nBase
+      s = [(mkName "_Self", typ)]
+      rev = [(typ, VarT $ mkName "_Self")]
+      ds1 = map (substType s) ds
 --  runIO $ putStrLn "---- defineAllSumData"
   dataDec <- defineAllSumData tyconName tvs consts ds1
 --  -- runIO $ putStrLn "---- getMethodTypes"

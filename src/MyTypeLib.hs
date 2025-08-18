@@ -3,26 +3,26 @@
 import Language.Haskell.TH (pprint)
 import Language.Haskell.TH.Syntax
 
-typeFArgs :: MonadFail m => Type -> m (Type, [Type])
-typeFArgs (AppT t1 t2)     = do
-  (n, ts) <- typeFArgs t1
-  pure (n, ts ++ [t2])
-typeFArgs (InfixT t1 n t2) = pure (ConT n, [t1, t2])
-typeFArgs t                = pure (t, [])
+typeFArgs ::Type -> (Type, [Type])
+typeFArgs (AppT t1 t2)     =
+  let (n, ts) = typeFArgs t1
+    in (n, ts ++ [t2])
+typeFArgs (InfixT t1 n t2) = (ConT n, [t1, t2])
+typeFArgs t                = (t, [])
 
 typeToList :: MonadFail m => Type -> m [Type]
 typeToList typ = do
-  (n, ts) <- typeFArgs typ
+  let (n, ts) = typeFArgs typ
   if n == TupleT (length ts)
     then pure ts
     else fail "typeToList: not a tuple"
   pure $ n : ts
 
-dataHead :: Type -> Q (Name, [Name])
-dataHead typ = do
-  (ConT n, ts) <- typeFArgs typ
-  let tvs = map (\ (VarT n) -> n) ts
-  pure (n, tvs)
+dataHead :: Type ->(Name, [Name])
+dataHead typ =
+  let (ConT n, ts) = typeFArgs typ
+      tvs = map (\ (VarT n) -> n) ts
+    in (n, tvs)
 
 replaceType :: [(Type, Type)] -> Type -> Type
 replaceType env t = case lookup t env of
