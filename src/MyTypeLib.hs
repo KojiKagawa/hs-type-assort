@@ -41,7 +41,6 @@ replaceDec :: [(Type, Type)] -> Dec -> Dec
 replaceDec env (SigD n t) = SigD n (replaceType env t)
 replaceDec _ d            = d
 
-
 substType :: [(Name, Type)] -> Type -> Type
 substType env (VarT n) = case lookup n env of
   Just t  -> t
@@ -85,3 +84,54 @@ unifyTypes (t1:ts1) (t2:ts2) = do
   s2 <- unifyTypes (map (substType s1) ts1) (map (substType s1) ts2)
   pure $ substCompose s2 s1
 unifyTypes _ _ = fail "unifyTypes: different length"
+
+matchType :: Type -> Type -> Q [(Name, Type)]
+matchType (VarT n) t = pure [(n, t)]
+matchType (ConT n1) (ConT n2) | n1 == n2 = pure []
+matchType (AppT t1 t2) (AppT t3 t4) = do
+  s1 <- matchType t1 t3
+  s2 <- matchType t2 (substType s1 t4)
+  pure $ substCompose s2 s1
+matchType (TupleT n1) (TupleT n2) | n1 == n2 = pure []
+matchType ListT ListT = pure []
+matchType ArrowT ArrowT = pure []
+matchType t1 t2 = fail $ "matchType: " ++ pprint t1 ++ " and " ++ pprint t2
+
+matchTypes :: [Type] -> [Type] -> Q [(Name, Type)]
+matchTypes [] [] = pure []
+matchTypes (t1:ts1) (t2:ts2) = do
+  s1 <- matchType t1 t2
+  s2 <- matchTypes ts1 (map (substType s1) ts2)
+  pure $ substCompose s2 s1
+matchTypes _ _ = fail "matchTypes: different length"
+
+fvs :: Type -> [Name] -> [Name]
+fvs (VarT n) acc         = n : acc
+fvs (AppT t1 t2) acc     = fvs t1 (fvs t2 acc)
+fvs (InfixT t1 n t2) acc = fvs t1 (fvs t2 acc)
+fvs (ConT _) acc         = acc
+fvs (TupleT _) acc       = acc
+fvs ListT acc            = acc
+fvs ArrowT acc           = acc
+fvs _ acc                = acc
+
+fvsList :: [Type] -> [Name] -> [Name]
+fvsList [] acc = acc
+fvsList (t:ts) acc = fvsList ts (fvs t acc)
+
+refreshFvs :: Type -> Q Type
+refreshFvs t = do
+  let names = fvs t []
+  newNames <- newNames (length names) "x"
+  let env = zip names (map VarT newNames)
+  return $ substType env t
+
+refreshFvsList :: [Type] -> Q [Type]
+refreshFvsList ts = do
+  let names = fvsList ts []
+  newNames <- newNames (length names) "x"
+  let env = zip names (map VarT newNames)
+  return $ map (substType env) ts
+
+newNames :: Int -> String -> Q [Name]
+newNames n s = mapM (newName . (s ++) . show) [1..n]

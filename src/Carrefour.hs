@@ -179,11 +179,23 @@ methodName n = mkName $ methodName' (nameBase n)
     methodName' "" = ""
     methodName' (x:xs) = toLower x : xs
 
-defineCastInstance :: CastClass -> Name -> [Name] -> Name -> Type -> [Dec]
-defineCastInstance (CastFrom fcName) tyconName tvs conName t =
-  let (_, vs) = typeFArgs t
-      self = mkName "_self"
-      finstDecl = InstanceD Nothing [] (foldl AppT (ConT fcName) (VarT self : vs)) [
+tyVarName :: TyVarBndr flag -> Name
+tyVarName (PlainTV n _)    = n
+tyVarName (KindedTV n _ _) = n
+
+defineCastInstance :: CastClass -> Name -> [Name] -> Name -> Type -> Q Dec
+defineCastInstance (CastFrom fcName) tyconName tvs conName t = do
+  (ClassI (ClassD _ _ tvs' _ [SigD fmname mt']) _) <- reify fcName
+  -- t -> tyconName tvs と mt を unify して、その結果を tvs' に適用する
+  -- また tvs' に tyconName が出現しないことを確認する
+  -- その tvs' がインスタンス宣言のパラメーターになる
+  let mt = AppT (AppT ArrowT t) (foldl AppT (ConT tyconName) (map VarT tvs))
+  mt1 : tvs1 <- refreshFvsList (mt' : map (\ b -> VarT (tyVarName b)) tvs')
+  -- Todo: match に失敗したら、失敗を処理する
+  s <- matchType mt1 mt
+  let vs = map (substType s) tvs1
+  self <- newName "_self"
+  let finstDecl = InstanceD Nothing [] (foldl AppT (ConT fcName) vs) [
               FunD (methodName fcName) [
                   Clause [VarP self] (NormalB (ConE conName `AppE` VarE self)) []
               ]
@@ -196,7 +208,7 @@ defineCastInstance (CastFrom fcName) tyconName tvs conName t =
               ]
           ]
       -}
-    in [finstDecl]
+  return finstDecl
 
 -- defineCastDecl 
 defineCastDecl :: Name -> [Name] -> Name -> Type -> Q [Dec]
@@ -209,8 +221,7 @@ defineCastDecl tyconName tvs conName t = do
   --                 tcName = mkName $ "To" ++ nameBase n
   --               in (classDecls, [CastClass { from = fcName, to = tcName }])
   --       cs -> ([], cs)
-  let ds = concatMap (\ c -> defineCastInstance c tyconName tvs conName t) cs
-  pure ds
+  mapM (\ c -> defineCastInstance c tyconName tvs conName t) cs
   
 defineCastDecls :: Name -> [Name] -> [Name] -> [Type] -> Q [Dec]
 defineCastDecls tyconName tvs conNames ds = do
@@ -307,8 +318,6 @@ getDependentParams n = do
     --   The function finds all the dependent parameters recursively.
     --   e.g. FunDep [a] [b, c] and FunDep [b] [c] will return [a, b, c]
   where
-    tyVarName (PlainTV n _)    = n
-    tyVarName (KindedTV n _ _) = n
     dependentParams deps = concatMap (\ (FunDep _ ns) -> ns) deps 
                             \\ concatMap(\ (FunDep as _) -> as) deps
     removeParam ns (FunDep as rs)  = 

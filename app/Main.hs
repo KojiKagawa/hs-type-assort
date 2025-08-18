@@ -128,15 +128,6 @@ data AllExp <- Lit | Plus AllExp AllExp | Times AllExp AllExp
 |]
 -}
 
-instance FromLit AllExp where
-    fromLit = cast
-
-instance FromPlus AllExp where
-    fromPlus = cast
-
-instance FromTimes AllExp where
-    fromTimes = cast
-
 main2 = let -- cast = toAllExp
             -- cast' = toAllExp
 -- cast' = cast にすると 
