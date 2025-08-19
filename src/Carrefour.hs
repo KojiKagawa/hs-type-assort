@@ -194,6 +194,7 @@ defineCastInstance (CastFrom fcName) tyconName tvs conName t = do
   -- Todo: match に失敗したら、失敗を処理する
   s <- matchType mt1 mt
   let vs = map (substType s) tvs1
+  -- Todo: vs に tyconName が出現しないことを確認する
   self <- newName "_self"
   let finstDecl = InstanceD Nothing [] (foldl AppT (ConT fcName) vs) [
               FunD fmName [
@@ -216,6 +217,7 @@ defineCastInstance (CastTo tcName) tyconName tvs conName t = do
   -- Todo: match に失敗したら、失敗を処理する
   s <- matchType mt1 mt
   let vs = map (substType s) tvs1
+  -- Todo: vs に tyconName が出現しないことを確認する
   self <- newName "_self"
   let tinstDecl = InstanceD Nothing [] (foldl AppT (ConT tcName) vs) [
               FunD tmName [
