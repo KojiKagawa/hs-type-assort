@@ -31,8 +31,12 @@ class Cast a b where
 instance Cast a a where
   cast = id
 
+-- for ANN
 data CastClass = CastFrom Name | CastTo Name 
                  deriving (Show, Data)
+
+-- for ANN
+data ForDefault = Derivings [Name] deriving (Show, Data)
 
 -- getMethodTypes t
 --   t: a type class constraint
@@ -157,8 +161,9 @@ defineCastClass' n nArgs =
             ]
         fcExp = VarE 'mkName `AppE` LitE (StringL fcStr)
         tcExp = VarE 'mkName `AppE` LitE (StringL tcStr)
-        annDecl = PragmaD (AnnP (TypeAnnotation n) (AppE (AppE (ConE ''CastClass) fcExp) tcExp))
-      in [fDecl, tDecl, annDecl]
+        annDecl1 = PragmaD (AnnP (TypeAnnotation n) (AppE (ConE 'CastFrom) fcExp)))
+        annDecl2 = PragmaD (AnnP (TypeAnnotation n) (AppE (ConE 'CastTo) tcExp) )))
+      in [fDecl, tDecl, annDecl1, annDecl2]
 
 defineCastClass :: Name -> Q [Dec]
 defineCastClass n = do
@@ -254,11 +259,14 @@ defineAllSumData :: Name -> [Name] -> [Name] -> [Type] -> Q [Dec]
 defineAllSumData tyconName tvs conNames ds = do
   let conDecls = zipWith (\ n t
         -> NormalC n [(Bang NoSourceUnpackedness NoSourceStrictness, t)]) conNames ds
-  let dec = DataD [] tyconName (map (\ v -> PlainTV v BndrReq) tvs) Nothing conDecls []
+      dec = DataD [] tyconName (map (\ v -> PlainTV v BndrReq) tvs) Nothing conDecls []
+      classNames = map (\ d -> let (dn, _) = dataHead d in VarE 'mkName `AppE` LitE (StringL (nameBase dn))) ds
+      annDecl = PragmaD (AnnP (TypeAnnotation tyconName)
+                        (ConE 'Derivings `AppE` (ListE classNames)))
   -- runIO $ putStrLn $ pprint dec
       toDecls   = defineToDecls tyconName tvs conNames ds
       fromDecls = defineFromDecls tyconName tvs conNames ds
-      ret = dec : toDecls ++ fromDecls
+      ret = dec : annDecl : toDecls ++ fromDecls
 --  runIO $ putStrLn $ pprint ret
   casts <- defineCastDecls tyconName tvs conNames ds
   pure (ret ++ casts)
