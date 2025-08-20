@@ -36,7 +36,7 @@ data CastClass = CastFrom Name | CastTo Name
                  deriving (Show, Data)
 
 -- for ANN
-data ForDefault = Derivings [Name] deriving (Show, Data)
+data ForDefault = Derivings Name [Name] [Name] deriving (Show, Data)
 
 -- getMethodTypes t
 --   t: a type class constraint
@@ -260,16 +260,23 @@ defineAllSumData tyconName tvs conNames ds = do
   let conDecls = zipWith (\ n t
         -> NormalC n [(Bang NoSourceUnpackedness NoSourceStrictness, t)]) conNames ds
       dec = DataD [] tyconName (map (\ v -> PlainTV v BndrReq) tvs) Nothing conDecls []
-      classNames = map (\ d -> let (dn, _) = dataHead d in VarE 'mkName `AppE` LitE (StringL (nameBase dn))) ds
-      annDecl = PragmaD (AnnP (TypeAnnotation tyconName)
-                        (ConE 'Derivings `AppE` (ListE classNames)))
   -- runIO $ putStrLn $ pprint dec
       toDecls   = defineToDecls tyconName tvs conNames ds
       fromDecls = defineFromDecls tyconName tvs conNames ds
-      ret = dec : annDecl : toDecls ++ fromDecls
+      ret = dec : toDecls ++ fromDecls
 --  runIO $ putStrLn $ pprint ret
   casts <- defineCastDecls tyconName tvs conNames ds
   pure (ret ++ casts)
+
+defineAnnotationForDefault :: Name -> [Type] -> [Type] -> Dec
+defineAnnotationForDefault tyconName ds cs = let
+    dataNames = map (\ d -> let (dn, _) = dataHead d in dn) ds
+    classNames = map (\ c -> let (cn, _) = dataHead c in cn) cs
+    annDecl = PragmaD (AnnP (TypeAnnotation tyconName)
+                        (foldl AppE (ConE 'Derivings) [mkNameExp tyconName, ListE (map mkNameExp dataNames), ListE (map mkNameExp classNames)]))
+  in annDecl
+  where
+    mkNameExp n = VarE 'mkName `AppE` LitE (StringL (nameBase n))
 
 -- countSelfArgs n t
 --   n:  name of the type variable for Self, e.g. "_Self"
@@ -421,7 +428,6 @@ defineInstance typ nBase cs cstrs ds (c, ms) = do
 --  runIO $ putStrLn $ pprint ret
   pure ret
 
-
 -- typeCarrefour typ ds cs
 --   typ:  type expression, e.g. AllTurtle s
 --   ds:   data type expressions, e.g. [Turtle s, ColorTurtle s, Turtle3D s, TwistedTurtle _Self]
@@ -436,6 +442,7 @@ typeCarrefour typ ds cs = do
       s = [(mkName "_Self", typ)]
       rev = [(typ, VarT $ mkName "_Self")]
       ds1 = map (substType s) ds
+      annDecl = defineAnnotationForDefault tyconName ds cs
 --  runIO $ putStrLn "---- defineAllSumData"
   dataDec <- defineAllSumData tyconName tvs consts ds1
 --  -- runIO $ putStrLn "---- getMethodTypes"
@@ -443,7 +450,7 @@ typeCarrefour typ ds cs = do
 --  runIO $ putStrLn "---- defineInstance"
   let cs1 = map (substType s) cs
   insts <- mapM (defineInstance typ nBase cs1 consts ds) $ zip cs mts
-  let ret = dataDec ++ insts
+  let ret = annDecl : dataDec ++ insts
   runIO $ putStrLn $ pprint ret
   pure ret
 
