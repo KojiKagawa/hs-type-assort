@@ -5,8 +5,10 @@
 
 import System.IO
 
-import Data.List ((\\))
+import Data.Data
 import Data.Maybe (catMaybes,mapMaybe)
+import Data.List ((\\))
+import Data.List.NonEmpty ( NonEmpty(..), toList)
 
 import GHC.Plugins
 import GHC.Core.Opt.Monad
@@ -20,7 +22,8 @@ import GHC.Data.Bag (bagToList)
 import GHC.Tc.Types.Constraint (Ct, WantedConstraints, ctPred, isEmptyWC, insolubleWC, tyCoVarsOfCt)
 import GHC.Tc.Utils.TcType (isMetaTyVar, isTyConableTyVar)
 import GHC.Data.List.SetOps (equivClasses)
-import Data.List.NonEmpty ( NonEmpty(..), toList)
+
+import Carrefour (ForDefault(..))
 
 plugin :: Plugin
 plugin = defaultPlugin {
@@ -62,8 +65,9 @@ findProposal :: [Ct] -> TcPluginM [DefaultingProposal]
 -- Todo: 上記を確認する
 findProposal simples = do
     let preds = map ctPred simples
-    tcPluginIO $ printSDocLn defaultSDocContext (PageMode False) stdout (ppr preds)        
+    tcPluginIO $ printSDocLn defaultSDocContext (PageMode False) stdout (ppr preds)  
     -- 今ここ
+    anns <- findForDefaultAnn :: TcPluginM (UniqFM Name [ForDefault])
     return []
   where
     (ptcs, nonPtcs) = partitionWith findPTC simples
@@ -111,6 +115,14 @@ getIndependentParams cls = let
       [] -> acc
       ds -> loop (removeDependentParams ds deps) (acc ++ ds)
 
--- install :: [CommandLineOption] -> [CoreToDo] -> [CoreToDo]
--- install _ tod = do
---     return todo
+-- ghc/compiler/GHC/Tc/Gen/Splice.hs の reifyAnnotations を参考にする
+-- さらに GHC.Types.Annotations の findAnns, deserializeAnns を使う
+
+findForDefaultAnn :: Data a => TcPluginM (UniqFM Name [a])
+findForDefaultAnn = do
+    topEnv   <- getTopEnv
+    epsHptAnns <- tcPluginIO $ prepareAnnotations topEnv Nothing
+    (tcg, _) <- getEnvs
+    let (_, env1) = deserializeAnns deserializeWithData epsHptAnns
+        (_, env2) = deserializeAnns deserializeWithData (tcg_ann_env tcg)
+    return (env1 `plusUFM` env2)
