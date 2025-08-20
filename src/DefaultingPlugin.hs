@@ -17,9 +17,10 @@ import GHC.Tc.Plugin
 import GHC.Utils.Ppr
 import GHC.Tc.Solver (approximateWC)
 import GHC.Data.Bag (bagToList)
-import GHC.Tc.Types.Constraint (Ct, WantedConstraints, ctPred, isEmptyWC, insolubleWC)
-import GHC.Tc.Utils.TcType (isMetaTyVar)
+import GHC.Tc.Types.Constraint (Ct, WantedConstraints, ctPred, isEmptyWC, insolubleWC, tyCoVarsOfCt)
+import GHC.Tc.Utils.TcType (isMetaTyVar, isTyConableTyVar)
 import GHC.Data.List.SetOps (equivClasses)
+import Data.List.NonEmpty ( NonEmpty(..), toList)
 
 plugin :: Plugin
 plugin = defaultPlugin {
@@ -54,18 +55,34 @@ tryDefaulting s wanteds
               printSDocLn defaultSDocContext (PageMode False) stdout (ppr simples)
           findProposal simples
 
+-- ghc/compiler/GHC/Tc/Solver/Defaults.hs の findDefaultableGroups, disambigGroup までを参考にする
+--   なお、disambigProposalSequences は run_defaulting_plugin が呼び出すはず
 findProposal :: [Ct] -> TcPluginM [DefaultingProposal]
 -- よくわからないが Ct には ambiguity に関する型変数を含む Constraint しか含まれていないようだ
 -- Todo: 上記を確認する
 findProposal simples = do
     let preds = map ctPred simples
-    tcPluginIO $ printSDocLn defaultSDocContext (PageMode False) stdout (ppr preds)
-    let (ptcs, nonPtcs) = partitionWith findPTC simples
-        ptcGroups       = equivClasses cmp_tv ptcs
+    tcPluginIO $ printSDocLn defaultSDocContext (PageMode False) stdout (ppr preds)        
     -- 今ここ
     return []
   where
+    (ptcs, nonPtcs) = partitionWith findPTC simples
+    ptcs :: [(Ct, Class, TcTyVar)]
+    nonPtcs :: [Ct]
+    ptcGroups       = equivClasses cmp_tv ptcs
+    ptcGroups :: [NonEmpty (Ct, Class, TcTyVar)]
     cmp_tv (_,_,tv1) (_,_,tv2) = tv1 `compare` tv2
+    defaultable_tyvar tv others = 
+        isTyConableTyVar tv 
+        && not (tv `elemVarSet` mapUnionVarSet tyCoVarsOfCt nonPtcs) 
+        && not (tv `elemVarSet` mapUnionVarSet tyCoVarsOfCt others)
+    defaultable_classes classes = True -- 今ここ
+    group = [ (tv, map fstOf3 group) 
+              | (group'@((_, _, tv) :| _), rest)  <- holes ptcGroups
+              , let group = toList group'
+              , defaultable_tyvar tv (map fstOf3 $ concatMap toList rest)
+              , defaultable_classes (map sndOf3 group) ]
+
 
 -- find parametric type classes (classes with only one dependent parameter)
 findPTC :: Ct -> Either (Ct, Class, TcTyVar) Ct 
