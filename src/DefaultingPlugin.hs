@@ -48,6 +48,13 @@ defaultingP _ = Just $ GHC.Tc.Types.DefaultingPlugin {
 }
 
 -- ghc/compiler/GHC/Tc/Solver/Defaults.hs の tryTypeClassDefaulting を参考にする
+-- data DefaultingProposal
+--   = DefaultingProposal
+--     { deProposals :: [[(TcTyVar, Type)]]
+--       -- ^ The type variable assignments to try.
+--     , deProposalCts :: [Ct]
+--       -- ^ The constraints against which defaults are checked.
+--   }
 tryDefaulting :: () -> WantedConstraints -> TcPluginM [DefaultingProposal]
 tryDefaulting s wanteds 
   | isEmptyWC wanteds || insolubleWC wanteds = return []
@@ -64,18 +71,19 @@ tryDefaulting s wanteds
 
 nameOfMyName :: MyName -> TcPluginM GHC.Plugins.Name
 nameOfMyName (base, mod, pkg) = do
-    mn <- case mod of
+    mod <- case mod of
         Nothing -> do
             (tcg, _) <- getEnvs
-            return (moduleName $ tcg_mod tcg)
-        Just m  -> return $ mkModuleName m
-    let pq = case pkg of
-          Nothing -> NoPkgQual
-          Just n  -> ThisPkg (UnitId (mkFastString n)) -- OtherPkg でなくてよいのか？
-    result <- findImportedModule mn pq 
-    mod <- case result of
-        Found _ mod -> return mod
-        _           -> fail $ "nameOfMyName: module not found: " ++ show mn
+            return (tcg_mod tcg)
+        Just m  -> do
+            let pq = case pkg of
+                         Nothing -> NoPkgQual
+                         Just n  -> ThisPkg (UnitId (mkFastString n)) -- OtherPkg でなくてよいのか？
+                mn = mkModuleName m
+            result <- findImportedModule mn pq
+            case result of
+                Found _ mod -> return mod
+                _           -> fail $ "nameOfMyName: module not found: " ++ show mn
     lookupOrig mod (mkTcOcc base)
 
 nameEq :: Language.Haskell.TH.Syntax.Name -> MyName -> Bool
@@ -120,6 +128,13 @@ forDefaultToClasses (Derivings name types classes) = do
         printSDocLn defaultSDocContext (PageMode False) stdout (ppr name')
         putStrLn "forDefaultToClasses: end"
     return (name', classes')
+
+tnnameToTyCon :: GHC.Plugins.Name -> TcPluginM Type
+tnnameToTyCon n = do
+    tycon <- tcLookupTyCon n
+    let n = tyConArity tycon
+        vars = tyConTyVars tycon -- Todo: これでよいのか？
+    return (mkTyConApp tycon (map mkTyVarTy vars))
 
 -- Haskell のソース https://gitlab.haskell.org/ghc/ghc の
 -- ghc/compiler/GHC/Tc/Solver/Defaults.hs 
