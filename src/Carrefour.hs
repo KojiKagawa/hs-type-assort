@@ -24,6 +24,7 @@ import Data.List (nub, (\\))
 import Data.Data (Data)
 import Data.Maybe (catMaybes, mapMaybe)
 import Control.Monad (zipWithM)
+import GHC.Utils.Outputable as Outputable
 
 class Cast a b where
   cast :: a -> b
@@ -32,11 +33,32 @@ instance Cast a a where
   cast = id
 
 -- for ANN
-data CastClass = CastFrom Name | CastTo Name 
+data CastClass = CastFrom Name Name | CastTo Name Name
                  deriving (Show, Data)
 
+sourceOfCast (CastFrom _ n) = n
+sourceOfCast (CastTo _ n)   = n
+
+type MyName = (String {- nameBase-}, Maybe String {- nameModule -}, Maybe String {- namePackage -})
+
+myNameOfName :: Name -> MyName
+myNameOfName name = (nameBase name, nameModule name, namePackage name)
+
+myNameExpOfName :: Name -> Exp
+myNameExpOfName name = let (base, mod, pkg) = myNameOfName name
+                       in TupE $ map Just [LitE (StringL base), expOfMBString mod, expOfMBString pkg]
+    where expOfMBString (Just s) = AppE (ConE 'Just) (LitE (StringL s))
+          expOfMBString Nothing  = ConE 'Nothing
+
 -- for ANN
-data ForDefault = Derivings Name [Name] [Name] deriving (Show, Data)
+data ForDefault = Derivings MyName [MyName] [MyName] deriving (Show, Data)
+
+instance Outputable CastClass where
+  ppr (CastFrom name1 name2) = text "CastFrom" <+> Outputable.ppr name1 <+> text "to" <+> Outputable.ppr name2
+  ppr (CastTo name1 name2)   = text "CastTo" <+> Outputable.ppr name1 <+> text "from" <+> Outputable.ppr name2
+
+instance Outputable Name where
+  ppr n = text (nameBase n) <+> text "in" <+> text (show (nameModule n)) <+> text "from" <+> text (show (namePackage n))
 
 -- getMethodTypes t
 --   t: a type class constraint
@@ -189,7 +211,7 @@ tyVarName (PlainTV n _)    = n
 tyVarName (KindedTV n _ _) = n
 
 defineCastInstance :: CastClass -> Name -> [Name] -> Name -> Type -> Q Dec
-defineCastInstance (CastFrom fcName) tyconName tvs conName t = do
+defineCastInstance (CastFrom fcName _) tyconName tvs conName t = do
   (ClassI (ClassD _ _ tvs' _ [SigD fmName mt']) _) <- reify fcName
   -- t -> tyconName tvs と mt を unify して、その結果を tvs' に適用する
   -- また tvs' に tyconName が出現しないことを確認する
@@ -215,7 +237,7 @@ defineCastInstance (CastFrom fcName) tyconName tvs conName t = do
           ]
       -}
   return finstDecl
-defineCastInstance (CastTo tcName) tyconName tvs conName t = do
+defineCastInstance (CastTo tcName _) tyconName tvs conName t = do
   (ClassI (ClassD _ _ tvs' _ [SigD tmName mt']) _) <- reify tcName
   let mt = AppT (AppT ArrowT (foldl AppT (ConT tyconName) (map VarT tvs))) (ConT ''Maybe `AppT` t) 
   mt1 : tvs1 <- refreshFvsList (mt' : map (\ b -> VarT (tyVarName b)) tvs')
@@ -273,10 +295,8 @@ defineAnnotationForDefault tyconName ds cs = let
     dataNames = map (\ d -> let (dn, _) = dataHead d in dn) ds
     classNames = map (\ c -> let (cn, _) = dataHead c in cn) cs
     annDecl = PragmaD (AnnP (TypeAnnotation tyconName)
-                        (foldl AppE (ConE 'Derivings) [mkNameExp tyconName, ListE (map mkNameExp dataNames), ListE (map mkNameExp classNames)]))
+                        (foldl AppE (ConE 'Derivings) [myNameExpOfName tyconName, ListE (map myNameExpOfName dataNames), ListE (map myNameExpOfName classNames)]))
   in annDecl
-  where
-    mkNameExp n = VarE 'mkName `AppE` LitE (StringL (nameBase n))
 
 -- countSelfArgs n t
 --   n:  name of the type variable for Self, e.g. "_Self"

@@ -26,7 +26,7 @@ import GHC.Tc.Utils.TcType (isMetaTyVar, isTyConableTyVar)
 import GHC.Data.List.SetOps (equivClasses)
 import GHC.Types.SourceText (StringLiteral(..), SourceText(..))
 
-import Carrefour (ForDefault(..), CastClass(..))
+import Carrefour (ForDefault(..), CastClass(..), sourceOfCast)
 
 plugin :: Plugin
 plugin = defaultPlugin {
@@ -61,30 +61,38 @@ tryDefaulting s wanteds
               printSDocLn defaultSDocContext (PageMode False) stdout (ppr simples)
           findProposal simples
 
-nameOfName :: Language.Haskell.TH.Syntax.Name -> TcPluginM GHC.Plugins.Name
-nameOfName name = do
-    let nb = nameBase name
-        nm = nameModule name
-        np = namePackage name
-    mn <- case nm of
+nameOfName :: (String, Maybe String, Maybe String) -> TcPluginM GHC.Plugins.Name
+nameOfName (base, mod, pkg) = do
+    mn <- case mod of
         Nothing -> fail "nameOfName: no module name"
         Just m  -> return $ mkModuleName m
-    let pq = case np of
+    let pq = case pkg of
           Nothing -> NoPkgQual
-          Just n  -> NoPkgQual -- 今ここ -- PkgQual $ StringLiteral NoSourceText (mkFastString n) Nothing
+          Just n  -> ThisPkg (UnitId (mkFastString n)) -- OtherPkg でなくてよいのか？
     result <- findImportedModule mn pq 
     mod <- case result of
         Found _ mod -> return mod
         _           -> fail $ "nameOfName: module not found: " ++ show mn
-    lookupOrig mod (mkDataOcc nb)
+    lookupOrig mod (mkDataOcc base)
 
--- forDefaultToClasses :: ForDefault -> TcPluginM (Name, [Name])
+-- forDefaultToClasses :: ForDefault -> TcPluginM (Name, [Name], [Name])
 forDefaultToClasses (Derivings name types classes) = do
     anns <- getAnnotationsForData :: TcPluginM (UniqFM GHC.Plugins.Name [CastClass])
     ts <- mapM nameOfName types
-    let classes2 :: [Maybe [CastClass]]
-        classes2 = map (\ dn -> lookupUFM anns dn) ts
-    return (name, classes, classes2)
+    tcPluginIO $ do
+        putStrLn "forDefaultToClasses:"
+        printSDocLn defaultSDocContext (PageMode False) stdout (ppr anns)
+        printSDocLn defaultSDocContext (PageMode False) stdout (ppr ts)
+        putStrLn (show $ map getUnique ts)
+    let anns2 :: [CastClass]
+        anns2 = concat $ nonDetEltsUFM anns
+        -- classes2 = map (\dn -> filter (\ cc -> sourceOfCast cc == dn) anns2) ts
+    -- 今ここ
+    tcPluginIO $ do
+        putStrLn "----"
+        -- printSDocLn defaultSDocContext (PageMode False) stdout (ppr classes2)
+        putStrLn "forDefaultToClasses: end"
+    return (name, ts, classes)
 
 -- Haskell のソース https://gitlab.haskell.org/ghc/ghc の
 -- ghc/compiler/GHC/Tc/Solver/Defaults.hs 
@@ -96,9 +104,17 @@ findProposal :: [Ct] -> TcPluginM [DefaultingProposal]
 -- Todo: 上記を確認する
 findProposal simples = do
     let preds = map ctPred simples
-    tcPluginIO $ printSDocLn defaultSDocContext (PageMode False) stdout (ppr preds)  
     -- 今ここ
     anns <- getAnnotationsForData :: TcPluginM (UniqFM GHC.Plugins.Name [ForDefault])
+    let annList :: [ForDefault]
+        annList = concat $ nonDetEltsUFM anns
+    candidates <- mapM forDefaultToClasses annList
+    tcPluginIO $ do
+        putStrLn "findProposal:"
+        printSDocLn defaultSDocContext (PageMode False) stdout (ppr preds)
+        putStrLn (show annList)
+        -- putStrLn (show candidates)
+        putStrLn "findProposal: End"
     return []
   where
     (ptcs, nonPtcs) = partitionWith findPTC simples

@@ -7,13 +7,13 @@ data Lit = Lit Double
 
 class FromLit a where
     fromLit :: Lit -> a
-{-# ANN type Lit (CastFrom ''FromLit) #-}
+{-# ANN type Lit (CastFrom ''FromLit ''Lit) #-}
 
 data Plus s1 s2 = Plus s1 s2
 
 class FromPlus a where
     fromPlus :: Plus a a -> a
-{-# ANN type Plus (CastFrom ''FromPlus) #-}
+{-# ANN type Plus (CastFrom ''FromPlus ''Plus) #-}
 
 class Eval x where
    eval :: x -> Double
