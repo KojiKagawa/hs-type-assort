@@ -10,7 +10,9 @@ import Data.Maybe (catMaybes,mapMaybe)
 import Data.List ((\\))
 import Data.List.NonEmpty ( NonEmpty(..), toList)
 
-import GHC.Plugins
+import Language.Haskell.TH.Syntax (Name, nameBase, nameModule, namePackage)
+
+import GHC.Plugins hiding (nameModule, namePackage)
 import GHC.Core.Opt.Monad
 import GHC.Core.Class
 import GHC.Core.Predicate (getClassPredTys_maybe)
@@ -22,8 +24,9 @@ import GHC.Data.Bag (bagToList)
 import GHC.Tc.Types.Constraint (Ct, WantedConstraints, ctPred, isEmptyWC, insolubleWC, tyCoVarsOfCt)
 import GHC.Tc.Utils.TcType (isMetaTyVar, isTyConableTyVar)
 import GHC.Data.List.SetOps (equivClasses)
+import GHC.Types.SourceText (StringLiteral(..), SourceText(..))
 
-import Carrefour (ForDefault(..))
+import Carrefour (ForDefault(..), CastClass(..))
 
 plugin :: Plugin
 plugin = defaultPlugin {
@@ -58,7 +61,35 @@ tryDefaulting s wanteds
               printSDocLn defaultSDocContext (PageMode False) stdout (ppr simples)
           findProposal simples
 
--- ghc/compiler/GHC/Tc/Solver/Defaults.hs の findDefaultableGroups, disambigGroup までを参考にする
+nameOfName :: Language.Haskell.TH.Syntax.Name -> TcPluginM GHC.Plugins.Name
+nameOfName name = do
+    let nb = nameBase name
+        nm = nameModule name
+        np = namePackage name
+    mn <- case nm of
+        Nothing -> fail "nameOfName: no module name"
+        Just m  -> return $ mkModuleName m
+    let pq = case np of
+          Nothing -> NoPkgQual
+          Just n  -> NoPkgQual -- 今ここ -- PkgQual $ StringLiteral NoSourceText (mkFastString n) Nothing
+    result <- findImportedModule mn pq 
+    mod <- case result of
+        Found _ mod -> return mod
+        _           -> fail $ "nameOfName: module not found: " ++ show mn
+    lookupOrig mod (mkDataOcc nb)
+
+-- forDefaultToClasses :: ForDefault -> TcPluginM (Name, [Name])
+forDefaultToClasses (Derivings name types classes) = do
+    anns <- getAnnotationsForData :: TcPluginM (UniqFM GHC.Plugins.Name [CastClass])
+    ts <- mapM nameOfName types
+    let classes2 :: [Maybe [CastClass]]
+        classes2 = map (\ dn -> lookupUFM anns dn) ts
+    return (name, classes, classes2)
+
+-- Haskell のソース https://gitlab.haskell.org/ghc/ghc の
+-- ghc/compiler/GHC/Tc/Solver/Defaults.hs 
+-- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/compiler/GHC/Tc/Solver/Default.hs?ref_type=heads) 
+-- の findDefaultableGroups, disambigGroup までを参考にする
 --   なお、disambigProposalSequences は run_defaulting_plugin が呼び出すはず
 findProposal :: [Ct] -> TcPluginM [DefaultingProposal]
 -- よくわからないが Ct には ambiguity に関する型変数を含む Constraint しか含まれていないようだ
@@ -67,7 +98,7 @@ findProposal simples = do
     let preds = map ctPred simples
     tcPluginIO $ printSDocLn defaultSDocContext (PageMode False) stdout (ppr preds)  
     -- 今ここ
-    anns <- findForDefaultAnn :: TcPluginM (UniqFM Name [ForDefault])
+    anns <- getAnnotationsForData :: TcPluginM (UniqFM GHC.Plugins.Name [ForDefault])
     return []
   where
     (ptcs, nonPtcs) = partitionWith findPTC simples
@@ -86,7 +117,6 @@ findProposal simples = do
               , let group = toList group'
               , defaultable_tyvar tv (map fstOf3 $ concatMap toList rest)
               , defaultable_classes (map sndOf3 group) ]
-
 
 -- find parametric type classes (classes with only one dependent parameter)
 findPTC :: Ct -> Either (Ct, Class, TcTyVar) Ct 
@@ -117,10 +147,9 @@ getIndependentParams cls = let
 
 -- ghc/compiler/GHC/Tc/Gen/Splice.hs の reifyAnnotations を参考にする
 -- さらに GHC.Types.Annotations の findAnns, deserializeAnns を使う
-
-findForDefaultAnn :: Data a => TcPluginM (UniqFM Name [a])
-findForDefaultAnn = do
-    topEnv   <- getTopEnv
+getAnnotationsForData :: Data a => TcPluginM (UniqFM GHC.Plugins.Name [a])
+getAnnotationsForData = do
+    topEnv   <- getTopEnv -- getAnnotations はこちらを使っていない？
     epsHptAnns <- tcPluginIO $ prepareAnnotations topEnv Nothing
     (tcg, _) <- getEnvs
     let (_, env1) = deserializeAnns deserializeWithData epsHptAnns
