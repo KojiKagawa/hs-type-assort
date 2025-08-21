@@ -26,7 +26,8 @@ import GHC.Tc.Utils.TcType (isMetaTyVar, isTyConableTyVar)
 import GHC.Data.List.SetOps (equivClasses)
 import GHC.Types.SourceText (StringLiteral(..), SourceText(..))
 
-import Carrefour (ForDefault(..), CastClass(..), sourceOfCast)
+import Carrefour (ForDefault(..), CastClass(..), sourceOfCast, classOfCast, MyName, myNameOfName)
+import MyTypeLib (dataHead)
 
 plugin :: Plugin
 plugin = defaultPlugin {
@@ -61,10 +62,12 @@ tryDefaulting s wanteds
               printSDocLn defaultSDocContext (PageMode False) stdout (ppr simples)
           findProposal simples
 
-nameOfName :: (String, Maybe String, Maybe String) -> TcPluginM GHC.Plugins.Name
-nameOfName (base, mod, pkg) = do
+nameOfMyName :: MyName -> TcPluginM GHC.Plugins.Name
+nameOfMyName (base, mod, pkg) = do
     mn <- case mod of
-        Nothing -> fail "nameOfName: no module name"
+        Nothing -> do
+            (tcg, _) <- getEnvs
+            return (moduleName $ tcg_mod tcg)
         Just m  -> return $ mkModuleName m
     let pq = case pkg of
           Nothing -> NoPkgQual
@@ -72,27 +75,51 @@ nameOfName (base, mod, pkg) = do
     result <- findImportedModule mn pq 
     mod <- case result of
         Found _ mod -> return mod
-        _           -> fail $ "nameOfName: module not found: " ++ show mn
-    lookupOrig mod (mkDataOcc base)
+        _           -> fail $ "nameOfMyName: module not found: " ++ show mn
+    lookupOrig mod (mkTcOcc base)
 
--- forDefaultToClasses :: ForDefault -> TcPluginM (Name, [Name], [Name])
+nameEq :: Language.Haskell.TH.Syntax.Name -> MyName -> Bool
+n1 `nameEq` (nb2, nm2, np2) = 
+    nameBase n1 == nb2 
+    && case (nameModule n1, nm2) of
+        (Just m1, Just m2) -> m1 == m2
+        (Nothing, Nothing) -> True
+        _                  -> False
+    && case (namePackage n1, np2) of
+        (Just p1, Just p2) -> p1 == p2
+        (Nothing, Nothing) -> True
+        _                  -> False
+
+forDefaultToClasses :: ForDefault -> TcPluginM (GHC.Plugins.Name, [GHC.Plugins.Name])
 forDefaultToClasses (Derivings name types classes) = do
     anns <- getAnnotationsForData :: TcPluginM (UniqFM GHC.Plugins.Name [CastClass])
-    ts <- mapM nameOfName types
+    -- -- ts <- mapM nameOfMyName types
     tcPluginIO $ do
         putStrLn "forDefaultToClasses:"
         printSDocLn defaultSDocContext (PageMode False) stdout (ppr anns)
-        printSDocLn defaultSDocContext (PageMode False) stdout (ppr ts)
-        putStrLn (show $ map getUnique ts)
+    --     -- printSDocLn defaultSDocContext (PageMode False) stdout (ppr ts)
+    --     -- putStrLn (show $ map getUnique ts)
     let anns2 :: [CastClass]
         anns2 = concat $ nonDetEltsUFM anns
-        -- classes2 = map (\dn -> filter (\ cc -> sourceOfCast cc == dn) anns2) ts
-    -- 今ここ
+        classes2 :: [MyName]
+        classes2 = map (myNameOfName . classOfCast)  
+                      $ concat $ map (\dn -> filter (\ cc -> sourceOfCast cc `nameEq` dn ) anns2) types
     tcPluginIO $ do
         putStrLn "----"
+        putStrLn (show name)
+        putStrLn (show types)
+        putStrLn (show anns2)
+        putStrLn (show classes2)
         -- printSDocLn defaultSDocContext (PageMode False) stdout (ppr classes2)
+    classes' <- mapM nameOfMyName (classes ++ classes2) 
+    tcPluginIO $ do
+        putStrLn "---- return"
+        printSDocLn defaultSDocContext (PageMode False) stdout (ppr classes')     
+    name' <- nameOfMyName name
+    tcPluginIO $ do
+        printSDocLn defaultSDocContext (PageMode False) stdout (ppr name')
         putStrLn "forDefaultToClasses: end"
-    return (name, ts, classes)
+    return (name', classes')
 
 -- Haskell のソース https://gitlab.haskell.org/ghc/ghc の
 -- ghc/compiler/GHC/Tc/Solver/Defaults.hs 
@@ -103,17 +130,22 @@ findProposal :: [Ct] -> TcPluginM [DefaultingProposal]
 -- よくわからないが Ct には ambiguity に関する型変数を含む Constraint しか含まれていないようだ
 -- Todo: 上記を確認する
 findProposal simples = do
+    tcPluginIO $ putStrLn "findProposal: Start"
     let preds = map ctPred simples
+    tcPluginIO $ do
+        putStrLn "findProposal: -- preds"
+        printSDocLn defaultSDocContext (PageMode False) stdout (ppr preds)
     -- 今ここ
     anns <- getAnnotationsForData :: TcPluginM (UniqFM GHC.Plugins.Name [ForDefault])
     let annList :: [ForDefault]
         annList = concat $ nonDetEltsUFM anns
+    tcPluginIO $ do
+        putStrLn "-- annotations"
+        putStrLn (show annList)
     candidates <- mapM forDefaultToClasses annList
     tcPluginIO $ do
-        putStrLn "findProposal:"
-        printSDocLn defaultSDocContext (PageMode False) stdout (ppr preds)
-        putStrLn (show annList)
-        -- putStrLn (show candidates)
+        putStrLn "-- candidates"
+        printSDocLn defaultSDocContext (PageMode False) stdout (ppr candidates)
         putStrLn "findProposal: End"
     return []
   where
@@ -127,12 +159,13 @@ findProposal simples = do
         isTyConableTyVar tv 
         && not (tv `elemVarSet` mapUnionVarSet tyCoVarsOfCt nonPtcs) 
         && not (tv `elemVarSet` mapUnionVarSet tyCoVarsOfCt others)
-    defaultable_classes classes = True -- 今ここ
-    group = [ (tv, map fstOf3 group) 
+    defaultable_classes classes candidates = 
+        map fst $ filter (\ (t, cs) -> all (\ c -> c `elem` cs) classes) candidates
+    proposalOf candidates = [ (tv, t) 
               | (group'@((_, _, tv) :| _), rest)  <- holes ptcGroups
               , let group = toList group'
               , defaultable_tyvar tv (map fstOf3 $ concatMap toList rest)
-              , defaultable_classes (map sndOf3 group) ]
+              , t <- defaultable_classes (map sndOf3 group) candidates]
 
 -- find parametric type classes (classes with only one dependent parameter)
 findPTC :: Ct -> Either (Ct, Class, TcTyVar) Ct 
@@ -168,6 +201,7 @@ getAnnotationsForData = do
     topEnv   <- getTopEnv -- getAnnotations はこちらを使っていない？
     epsHptAnns <- tcPluginIO $ prepareAnnotations topEnv Nothing
     (tcg, _) <- getEnvs
-    let (_, env1) = deserializeAnns deserializeWithData epsHptAnns
-        (_, env2) = deserializeAnns deserializeWithData (tcg_ann_env tcg)
+    -- Todo: ModuleEnv も使用する
+    let (menv1, env1) = deserializeAnns deserializeWithData epsHptAnns
+        (menv2, env2) = deserializeAnns deserializeWithData (tcg_ann_env tcg)
     return (env1 `plusUFM` env2)

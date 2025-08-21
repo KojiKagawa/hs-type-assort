@@ -36,8 +36,13 @@ instance Cast a a where
 data CastClass = CastFrom Name Name | CastTo Name Name
                  deriving (Show, Data)
 
+sourceOfCast :: CastClass -> Name
 sourceOfCast (CastFrom _ n) = n
 sourceOfCast (CastTo _ n)   = n
+
+classOfCast :: CastClass -> Name
+classOfCast (CastFrom c _) = c
+classOfCast (CastTo c _)   = c
 
 type MyName = (String {- nameBase-}, Maybe String {- nameModule -}, Maybe String {- namePackage -})
 
