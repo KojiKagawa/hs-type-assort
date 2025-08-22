@@ -151,6 +151,7 @@ findProposal :: [Ct] -> TcPluginM [DefaultingProposal]
 -- Todo: 上記を確認する
 findProposal simples = do
     tcPluginIO $ putStrLn "findProposal: Start"
+    mapM findPTCM simples
     let preds = map ctPred simples
     tcPluginIO $ do
         putStrLn "findProposal: -- preds"
@@ -164,14 +165,25 @@ findProposal simples = do
         putStrLn (show annList)
     candidates <- mapM forDefaultToClasses annList
     tcPluginIO $ do
+        putStrLn "-- ptcGroups:"
+        printSDocLn defaultSDocContext (PageMode False) stdout (ppr ptcGroups)
+        putStrLn "-- noPtcs:"
+        printSDocLn defaultSDocContext (PageMode False) stdout (ppr nonPtcs)
         putStrLn "-- candidates"
         printSDocLn defaultSDocContext (PageMode False) stdout (ppr candidates)
-        putStrLn "findProposal: End"
     let rawProposals :: [(TcTyVar, TyCon, [Ct])]
         rawProposals = proposalOf candidates
-    mapM (\ (tv, tycon, cts) -> do
+    tcPluginIO $ do
+        putStrLn "-- rawProposals:"
+        printSDocLn defaultSDocContext (PageMode False) stdout (ppr rawProposals)
+    ret <- mapM (\ (tv, tycon, cts) -> do
         ty <- tyconToType tycon
         return (DefaultingProposal [[(tv, ty)]] cts)) rawProposals
+    tcPluginIO $ do
+        putStrLn "-- returns:"
+        printSDocLn defaultSDocContext (PageMode False) stdout (ppr ret)
+        putStrLn "findProposal: End"
+    return ret
   where
     ptcs :: [(Ct, Class, TcTyVar)]
     nonPtcs :: [Ct]
@@ -213,16 +225,47 @@ findPTC cc
     = Left (cc, cls, tv)
     | otherwise = Right cc
 
+findPTCM :: Ct -> TcPluginM (Either (Ct, Class, TcTyVar) Ct)
+findPTCM cc = do
+    tcPluginIO $ do
+        putStrLn "findPTCM: Start"
+        printSDocLn defaultSDocContext (PageMode False) stdout (ppr cc)
+    case getClassPredTys_maybe (ctPred cc) of
+        Nothing -> do
+            tcPluginIO $ putStrLn "findPTCM: No class predicate"      
+            return (Right cc)
+        Just (cls, tys) -> do
+            let independentParams = getIndependentParams cls
+            tcPluginIO $ do
+                putStrLn ("findPTCM: independentParams: " ++ show independentParams ++ " for ")
+                printSDocLn defaultSDocContext (PageMode False) stdout (ppr cls)
+            case catMaybes $ zipWith (\ b ty -> if b then Just ty else Nothing) independentParams tys of
+                [ty] -> case getTyVar_maybe ty of
+                    Nothing -> do
+                        tcPluginIO $ do 
+                            putStrLn "findPTCM: No type variable found: "
+                            printSDocLn defaultSDocContext (PageMode False) stdout (ppr ty)
+                        return (Right cc)
+                    Just tv | isMetaTyVar tv -> return (Left (cc, cls, tv))
+                            | otherwise -> do
+                                tcPluginIO $ do 
+                                    putStrLn "findPTCM: Not a meta type variable: "
+                                    printSDocLn defaultSDocContext (PageMode False) stdout (ppr tv)
+                                return (Right cc)
+                tys -> do
+                    tcPluginIO $ do 
+                        putStrLn "findPTCM: Zero or Multiple independent parameters: "
+                        printSDocLn defaultSDocContext (PageMode False) stdout (ppr tys)
+                    return (Right cc)
 -- basically, reimplementation of getDependentParams in Carrefour.hs but for GHC.Core.Class
 getIndependentParams :: Class -> [Bool]
 getIndependentParams cls = let
-    (vars, deps) = classTvsFds  cls
+    (vars, deps) = classTvsFds cls
     ds = loop deps [] 
-  in  map (`elem` ds) vars
+  in map (\d -> not (d `elem` ds)) vars
   where
-    dependentParams deps = concatMap (\ (_, ns) -> ns) deps 
-                            \\ concatMap(\ (is, _) -> is) deps
-    removeParam ns (as, rs) = case rs \\ ns of 
+    dependentParams deps = concatMap snd deps \\ concatMap fst deps
+    removeParam ns (as, rs) = case rs \\ ns of
         []  -> Nothing
         rs' -> Just (as, rs')
     removeDependentParams ns = mapMaybe (removeParam ns)
