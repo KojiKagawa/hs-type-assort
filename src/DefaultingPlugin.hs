@@ -5,7 +5,7 @@
 
 import System.IO
 
-import Data.Data
+import Data.Data hiding (TyCon)
 import Data.Maybe (catMaybes,mapMaybe)
 import Data.List ((\\))
 import Data.List.NonEmpty ( NonEmpty(..), toList)
@@ -98,7 +98,7 @@ n1 `nameEq` (nb2, nm2, np2) =
         (Nothing, Nothing) -> True
         _                  -> False
 
-forDefaultToClasses :: ForDefault -> TcPluginM (GHC.Plugins.Name, [GHC.Plugins.Name])
+forDefaultToClasses :: ForDefault -> TcPluginM (TyCon, [Class])
 forDefaultToClasses (Derivings name types classes) = do
     anns <- getAnnotationsForData :: TcPluginM (UniqFM GHC.Plugins.Name [CastClass])
     -- -- ts <- mapM nameOfMyName types
@@ -119,19 +119,20 @@ forDefaultToClasses (Derivings name types classes) = do
         putStrLn (show anns2)
         putStrLn (show classes2)
         -- printSDocLn defaultSDocContext (PageMode False) stdout (ppr classes2)
-    classes' <- mapM nameOfMyName (classes ++ classes2) 
+    cns <- mapM nameOfMyName (classes ++ classes2) 
     tcPluginIO $ do
         putStrLn "---- return"
-        printSDocLn defaultSDocContext (PageMode False) stdout (ppr classes')     
+        printSDocLn defaultSDocContext (PageMode False) stdout (ppr cns)
     name' <- nameOfMyName name
+    ty <- tcLookupTyCon name'
     tcPluginIO $ do
         printSDocLn defaultSDocContext (PageMode False) stdout (ppr name')
         putStrLn "forDefaultToClasses: end"
-    return (name', classes')
+    classes'' <- mapM tcLookupClass cns
+    return (ty, classes'')
 
-tnnameToTyCon :: GHC.Plugins.Name -> TcPluginM Type
-tnnameToTyCon n = do
-    tycon <- tcLookupTyCon n
+tyconToType :: TyCon -> TcPluginM Type
+tyconToType tycon = do
     let n = tyConArity tycon
         vars = tyConTyVars tycon -- Todo: これでよいのか？
     vars' <- mapM copyTyVar vars
@@ -166,25 +167,41 @@ findProposal simples = do
         putStrLn "-- candidates"
         printSDocLn defaultSDocContext (PageMode False) stdout (ppr candidates)
         putStrLn "findProposal: End"
-    return []
+    let rawProposals :: [(TcTyVar, TyCon, [Ct])]
+        rawProposals = proposalOf candidates
+    mapM (\ (tv, tycon, cts) -> do
+        ty <- tyconToType tycon
+        return (DefaultingProposal [[(tv, ty)]] cts)) rawProposals
   where
-    (ptcs, nonPtcs) = partitionWith findPTC simples
     ptcs :: [(Ct, Class, TcTyVar)]
     nonPtcs :: [Ct]
-    ptcGroups       = equivClasses cmp_tv ptcs
+    (ptcs, nonPtcs) = partitionWith findPTC simples
+
     ptcGroups :: [NonEmpty (Ct, Class, TcTyVar)]
+    ptcGroups       = equivClasses cmp_tv ptcs    
+
     cmp_tv (_,_,tv1) (_,_,tv2) = tv1 `compare` tv2
+
+    defaultable_tyvar :: TcTyVar -> [Ct] -> Bool
     defaultable_tyvar tv others = 
         isTyConableTyVar tv 
         && not (tv `elemVarSet` mapUnionVarSet tyCoVarsOfCt nonPtcs) 
         && not (tv `elemVarSet` mapUnionVarSet tyCoVarsOfCt others)
-    defaultable_classes classes candidates = 
-        map fst $ filter (\ (t, cs) -> all (\ c -> c `elem` cs) classes) candidates
-    proposalOf candidates = [ (tv, t) 
+
+    subset :: Eq a => [a] -> [a] -> Bool
+    xs `subset` ys = all (`elem` ys) xs
+
+    defaultable_classes :: Eq b => [b] -> [(a, [b])] -> [a]
+    defaultable_classes classes cans = 
+        map fst $ filter (\ (t, cs) -> classes `subset` cs) cans
+
+    proposalOf :: [(TyCon, [Class])] -> [(TcTyVar, TyCon, [Ct])]
+    proposalOf cans = [ (tv, t, map fstOf3 group) 
               | (group'@((_, _, tv) :| _), rest)  <- holes ptcGroups
-              , let group = toList group'
+              , let group :: [(Ct, Class, TcTyVar)]
+                    group = toList group'
               , defaultable_tyvar tv (map fstOf3 $ concatMap toList rest)
-              , t <- defaultable_classes (map sndOf3 group) candidates]
+              , t <- defaultable_classes (map sndOf3 group) cans]
 
 -- find parametric type classes (classes with only one dependent parameter)
 findPTC :: Ct -> Either (Ct, Class, TcTyVar) Ct 
