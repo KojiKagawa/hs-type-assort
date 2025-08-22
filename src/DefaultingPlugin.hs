@@ -134,8 +134,12 @@ tnnameToTyCon n = do
     tycon <- tcLookupTyCon n
     let n = tyConArity tycon
         vars = tyConTyVars tycon -- Todo: これでよいのか？
-    return (mkTyConApp tycon (map mkTyVarTy vars))
-
+    vars' <- mapM copyTyVar vars
+    return (mkTyConApp tycon (map mkTyVarTy vars'))
+  where
+      copyTyVar :: TyVar -> TcPluginM TcTyVar
+      copyTyVar tv = newFlexiTyVar (varType tv)
+          
 -- Haskell のソース https://gitlab.haskell.org/ghc/ghc の
 -- ghc/compiler/GHC/Tc/Solver/Defaults.hs 
 -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/compiler/GHC/Tc/Solver/Default.hs?ref_type=heads) 
