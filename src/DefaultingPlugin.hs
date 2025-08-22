@@ -66,7 +66,7 @@ tryDefaulting s wanteds
         else do
           tcPluginIO $ do 
               putStrLn "Defaulting plugin running"
-              printSDocLn defaultSDocContext (PageMode False) stdout (ppr simples)
+            --   printSDocLn defaultSDocContext (PageMode False) stdout (ppr simples)
           findProposal simples
 
 nameOfMyName :: MyName -> TcPluginM GHC.Plugins.Name
@@ -102,9 +102,9 @@ forDefaultToClasses :: ForDefault -> TcPluginM (TyCon, [Class])
 forDefaultToClasses (Derivings name types classes) = do
     anns <- getAnnotationsForData :: TcPluginM (UniqFM GHC.Plugins.Name [CastClass])
     -- -- ts <- mapM nameOfMyName types
-    tcPluginIO $ do
-        putStrLn "forDefaultToClasses:"
-        printSDocLn defaultSDocContext (PageMode False) stdout (ppr anns)
+    -- tcPluginIO $ do
+    --     putStrLn "forDefaultToClasses:"
+    --     printSDocLn defaultSDocContext (PageMode False) stdout (ppr anns)
     --     -- printSDocLn defaultSDocContext (PageMode False) stdout (ppr ts)
     --     -- putStrLn (show $ map getUnique ts)
     let anns2 :: [CastClass]
@@ -112,22 +112,22 @@ forDefaultToClasses (Derivings name types classes) = do
         classes2 :: [MyName]
         classes2 = map (myNameOfName . classOfCast)  
                       $ concat $ map (\dn -> filter (\ cc -> sourceOfCast cc `nameEq` dn ) anns2) types
-    tcPluginIO $ do
-        putStrLn "----"
-        putStrLn (show name)
-        putStrLn (show types)
-        putStrLn (show anns2)
-        putStrLn (show classes2)
-        -- printSDocLn defaultSDocContext (PageMode False) stdout (ppr classes2)
+    -- tcPluginIO $ do
+    --     putStrLn "----"
+    --     putStrLn (show name)
+    --     putStrLn (show types)
+    --     putStrLn (show anns2)
+    --     putStrLn (show classes2)
+    --     -- printSDocLn defaultSDocContext (PageMode False) stdout (ppr classes2)
     cns <- mapM nameOfMyName (classes ++ classes2) 
-    tcPluginIO $ do
-        putStrLn "---- return"
-        printSDocLn defaultSDocContext (PageMode False) stdout (ppr cns)
+    -- tcPluginIO $ do
+    --     putStrLn "---- return"
+    --     printSDocLn defaultSDocContext (PageMode False) stdout (ppr cns)
     name' <- nameOfMyName name
     ty <- tcLookupTyCon name'
-    tcPluginIO $ do
-        printSDocLn defaultSDocContext (PageMode False) stdout (ppr name')
-        putStrLn "forDefaultToClasses: end"
+    -- tcPluginIO $ do
+    --     printSDocLn defaultSDocContext (PageMode False) stdout (ppr name')
+    --     putStrLn "forDefaultToClasses: end"
     classes'' <- mapM tcLookupClass cns
     return (ty, classes'')
 
@@ -150,39 +150,38 @@ findProposal :: [Ct] -> TcPluginM [DefaultingProposal]
 -- よくわからないが Ct には ambiguity に関する型変数を含む Constraint しか含まれていないようだ
 -- Todo: 上記を確認する
 findProposal simples = do
-    tcPluginIO $ putStrLn "findProposal: Start"
-    mapM findPTCM simples
+    -- tcPluginIO $ putStrLn "findProposal: Start"
+    -- mapM findPTCM simples
     let preds = map ctPred simples
-    tcPluginIO $ do
-        putStrLn "findProposal: -- preds"
-        printSDocLn defaultSDocContext (PageMode False) stdout (ppr preds)
-    -- 今ここ
+    -- tcPluginIO $ do
+    --     putStrLn "findProposal: -- preds"
+    --     printSDocLn defaultSDocContext (PageMode False) stdout (ppr preds)
     anns <- getAnnotationsForData :: TcPluginM (UniqFM GHC.Plugins.Name [ForDefault])
     let annList :: [ForDefault]
         annList = concat $ nonDetEltsUFM anns
-    tcPluginIO $ do
-        putStrLn "-- annotations"
-        putStrLn (show annList)
+    -- tcPluginIO $ do
+    --     putStrLn "-- annotations"
+    --     putStrLn (show annList)
     candidates <- mapM forDefaultToClasses annList
-    tcPluginIO $ do
-        putStrLn "-- ptcGroups:"
-        printSDocLn defaultSDocContext (PageMode False) stdout (ppr ptcGroups)
-        putStrLn "-- noPtcs:"
-        printSDocLn defaultSDocContext (PageMode False) stdout (ppr nonPtcs)
-        putStrLn "-- candidates"
-        printSDocLn defaultSDocContext (PageMode False) stdout (ppr candidates)
+    -- tcPluginIO $ do
+    --     putStrLn "-- ptcGroups:"
+    --     printSDocLn defaultSDocContext (PageMode False) stdout (ppr ptcGroups)
+    --     putStrLn "-- noPtcs:"
+    --     printSDocLn defaultSDocContext (PageMode False) stdout (ppr nonPtcs)
+    --     putStrLn "-- candidates"
+    --     printSDocLn defaultSDocContext (PageMode False) stdout (ppr candidates)
     let rawProposals :: [(TcTyVar, TyCon, [Ct])]
         rawProposals = proposalOf candidates
-    tcPluginIO $ do
-        putStrLn "-- rawProposals:"
-        printSDocLn defaultSDocContext (PageMode False) stdout (ppr rawProposals)
+    -- tcPluginIO $ do
+    --     putStrLn "-- rawProposals:"
+    --     printSDocLn defaultSDocContext (PageMode False) stdout (ppr rawProposals)
     ret <- mapM (\ (tv, tycon, cts) -> do
         ty <- tyconToType tycon
         return (DefaultingProposal [[(tv, ty)]] cts)) rawProposals
-    tcPluginIO $ do
-        putStrLn "-- returns:"
-        printSDocLn defaultSDocContext (PageMode False) stdout (ppr ret)
-        putStrLn "findProposal: End"
+    -- tcPluginIO $ do
+    --     putStrLn "-- returns:"
+    --     printSDocLn defaultSDocContext (PageMode False) stdout (ppr ret)
+    --     putStrLn "findProposal: End"
     return ret
   where
     ptcs :: [(Ct, Class, TcTyVar)]

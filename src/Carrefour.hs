@@ -476,7 +476,7 @@ typeCarrefour typ ds cs = do
   let cs1 = map (substType s) cs
   insts <- mapM (defineInstance typ nBase cs1 consts ds) $ zip cs mts
   let ret = annDecl : dataDec ++ insts
-  runIO $ putStrLn $ pprint ret
+  -- runIO $ putStrLn $ pprint ret
   pure ret
 
 replaceConst :: Type -> Q Type
