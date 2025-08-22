@@ -114,7 +114,6 @@ main1 = stToIO (do
       (ToAllTurtle (TwistedTurtle self0) RealWorld, (Cast (ColorTurtle RealWorld) self0))
 -}
 
-
 [carrefour| 
 data AllExp <- Lit | Plus _Self _Self | Times _Self _Self
     deriving (Eval _Self, PPrint _Self, Pick0 _Self _Self _Self) 
