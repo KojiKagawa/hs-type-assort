@@ -29,7 +29,7 @@ import Data.STRef
 import Data.Either
 
 [carrefour| 
-data assorted AllTurtle s = Turtle s | ColorTurtle s | Turtle3D s | TwistedTurtle _Self 
+data assorted AllTurtle s = Turtle s | ColorTurtle s | Turtle3D s | TwistedTurtle s _Self 
     deriving (TurtleLike _Self s, HasColor _Self s) 
 |]
 
@@ -91,21 +91,29 @@ instance ColorTurtle.HasColor (AllTurtle s) s
            setColor (AllTurtle3 x1) = setColor x1;}
 -}
 
-main1 = stToIO (do
-  -- putStrLn [carrefour| x |]
-  x1 <- newSTRef 0.0
-  y1 <- newSTRef 1.0
-  t1 <- newSTRef pi
-  let turtle1 = Turtle x1 y1 t1
-  x2 <- newSTRef (-1.0)
-  y2 <- newSTRef 0.0
-  t2 <- newSTRef 0.0
-  c2 <- newSTRef 0x00ff0000
-  let turtle2 = ColorTurtle x2 y2 t2 c2
+main1 = do
+  p <-  stToIO (do
+    -- putStrLn [carrefour| x |]
+    x1 <- newSTRef 0.0
+    y1 <- newSTRef 1.0
+    t1 <- newSTRef pi
+    let turtle1 = Turtle x1 y1 t1
+    x2 <- newSTRef (-1.0)
+    y2 <- newSTRef 0.0
+    t2 <- newSTRef 0.0
+    c2 <- newSTRef 0x00ff0000
+    let turtle2 = ColorTurtle x2 y2 t2 c2
 --      turtle3 :: Cast (ColorTurtle RealWorld) self0 => TwistedTurtle self0
-      turtle3 = TwistedTurtle ((id :: AllTurtle s -> AllTurtle s) (cast turtle2))
+    r2 <- newSTRef (cast turtle2)
+    let
+      turtle3 = TwistedTurtle ((id :: STRef s (AllTurtle s) -> STRef s (AllTurtle s)) r2)
       turtles = (id :: [AllTurtle s] -> [AllTurtle s]) [cast turtle1, cast turtle2, cast turtle3]
-  mapM_ (\ t -> forward t 3.3) turtles)
+    mapM_ (\ t -> forward t 3.3) turtles
+    x2' <- readSTRef x2
+    y2' <- readSTRef y2
+    return (x2', y2'))
+  print p
+
 
 {-
   want to deduce
@@ -151,5 +159,7 @@ main2 = let -- cast = toAllExp
 -- main3 = putStrLn $ foo False
 
 main = do main1
+          putStrLn "-----"
           main2
+          putStrLn "-----"
           -- main3
