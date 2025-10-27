@@ -54,8 +54,9 @@ typeParser = do
 -- dec :: Parser Dec
 dec = do
   symbol "data"
+  symbol "assorted"
   n <- typeParser
-  symbol "<-"
+  symbol "="
   ts <- sepBy1 typeParser (symbol "|")
   symbol "deriving"
   symbol "("

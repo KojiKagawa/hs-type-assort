@@ -29,7 +29,7 @@ import Data.STRef
 import Data.Either
 
 [carrefour| 
-data AllTurtle s <- Turtle s | ColorTurtle s | Turtle3D s | TwistedTurtle _Self 
+data assorted AllTurtle s = Turtle s | ColorTurtle s | Turtle3D s | TwistedTurtle _Self 
     deriving (TurtleLike _Self s, HasColor _Self s) 
 |]
 
@@ -115,14 +115,14 @@ main1 = stToIO (do
 -}
 
 [carrefour| 
-data AllExp <- Lit | Plus _Self _Self | Times _Self _Self
+data assorted AllExp = Lit | Plus _Self _Self | Times _Self _Self
     deriving (Eval _Self, PPrint _Self, Pick0 _Self _Self _Self) 
 |]
 
 {-
 -- 以下の書き方でも可
 [carrefour| 
-data AllExp <- Lit | Plus AllExp AllExp | Times AllExp AllExp
+data assorted AllExp = Lit | Plus AllExp AllExp | Times AllExp AllExp
     deriving (Eval AllExp, PPrint AllExp, Pick0 AllExp AllExp _Self) 
 |]
 -}
