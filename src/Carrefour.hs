@@ -27,10 +27,12 @@ import Control.Monad (zipWithM)
 import GHC.Utils.Outputable as Outputable
 
 class Cast a b where
-  cast :: a -> b
+  ucast :: a -> b
+  dcast :: b -> Maybe a
 
 instance Cast a a where
-  cast = id
+  ucast = id
+  dcast = Just
 
 -- for ANN
 data CastClass = CastFrom Name Name | CastTo Name Name
@@ -105,11 +107,14 @@ mkNames n s = map (mkName . (s ++) . show) [1..n]
 --       toAllTurtle = either toAllTurtle toAllTurtle
 --   4. castDecl
 --   instance ToAllTurtle a s => Cast a (AllTurtle s) where
---       cast _self = toAllTurtle _self
+--       ucast _self = toAllTurtle _self
+--       dcast _self = fromAllTurtle _self
 defineToDecls :: Name -> [Name] -> [Name] -> [Type] -> [Dec]
 defineToDecls tyconName tvs conNames ds = let
     toNameL = mkName $ "To" ++ nameBase tyconName
     toNameS = mkName $ "to" ++ nameBase tyconName
+    fromNameL = mkName $ "From" ++ nameBase tyconName
+    fromNameS = mkName $ "from" ++ nameBase tyconName
     self    = mkName "_self"
     selfv   = PlainTV self BndrReq
     ty      = foldl AppT (ConT tyconName) (map VarT tvs)
@@ -124,9 +129,11 @@ defineToDecls tyconName tvs conNames ds = let
                   [foldl AppT (ConT toNameL) (map VarT (a : tvs)), foldl AppT (ConT toNameL) (map VarT (b : tvs))]
                   (foldl AppT (ConT toNameL) (ConT ''Either `AppT` VarT a `AppT` VarT b : map VarT tvs))
                   [ValD (VarP toNameS) (NormalB (VarE 'either `AppE` VarE toNameS `AppE` VarE toNameS)) []]
-    castDecl = InstanceD Nothing [foldl AppT (ConT toNameL) (VarT a : map VarT tvs)]
+    castDecl = InstanceD Nothing [foldl AppT (ConT toNameL) (VarT a : map VarT tvs),
+                                  foldl AppT (ConT fromNameL) (VarT a : map VarT tvs)]
                         (foldl AppT (ConT ''Cast) [VarT a, ty])
-                        [FunD 'cast [Clause [VarP self] (NormalB (VarE toNameS `AppE` VarE self)) []]]
+                        [FunD 'ucast [Clause [VarP self] (NormalB (VarE toNameS `AppE` VarE self)) []],
+                         FunD 'dcast [Clause [VarP self] (NormalB (VarE fromNameS `AppE` VarE self)) []]]
   in classDecl : eiDecl : castDecl: instDecls
 
 -- defineFromDecls tyconName tvs conNames ds
@@ -287,11 +294,10 @@ defineAllSumData tyconName tvs conNames ds = do
   let conDecls = zipWith (\ n t
         -> NormalC n [(Bang NoSourceUnpackedness NoSourceStrictness, t)]) conNames ds
       dec = DataD [] tyconName (map (\ v -> PlainTV v BndrReq) tvs) Nothing conDecls []
-  -- runIO $ putStrLn $ pprint dec
-      toDecls   = defineToDecls tyconName tvs conNames ds
       fromDecls = defineFromDecls tyconName tvs conNames ds
-      ret = dec : toDecls ++ fromDecls
---  runIO $ putStrLn $ pprint ret
+      toDecls   = defineToDecls tyconName tvs conNames ds
+      ret = dec : fromDecls ++ toDecls
+  -- runIO $ putStrLn $ pprint ret
   casts <- defineCastDecls tyconName tvs conNames ds
   pure (ret ++ casts)
 
@@ -404,7 +410,7 @@ getInstanceContext d c = do
                                               pure $ substType [(mkName "_Self", VarT n)] t
                                             -- 依存している型変数の中の Self は新しい型変数に置き換える
                                        else pure $ substType [(mkName "_Self", d)] t) 
-                    flags ts -- ここでは __Self と _Self を同一視しない
+                    flags ts -- (Obsolete) ここでは __Self と _Self を同一視しない
   let c1  = foldl AppT (ConT n) ts1
   insts <- reifyInstances n ts1
   -- runIO $ print insts
@@ -439,7 +445,7 @@ defineInstance typ nBase cs cstrs ds (c, ms) = do
   --          _Self にすべての型を当てはめる
   --       _Self が複数のとき（binary method 以上があるとき）
   --          _Self1, _Self2, ... というように、独立な型変数に附番する
-  --          従属な型変数は、__Self (_が２個)を使う
+  --          (Obsolete) 従属な型変数は、__Self (_が２個)を使う
   --          インスタンスは _Self1, _Self2, ... に対してすべての組み合わせを考える
   -- 
   -- d や cs, ms の中で _Self の代わりに型名（e.g. AllTurtle s）が使われても対応できるようにする
