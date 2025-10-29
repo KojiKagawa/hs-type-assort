@@ -18,6 +18,9 @@ class FromTwistedTurtle s a | a -> s where
      fromTwistedTurtle :: TwistedTurtle s a -> a
 {-# ANN type TwistedTurtle (CastFrom ''FromTwistedTurtle ''TwistedTurtle) #-}
 
+twistedTurtle :: FromTwistedTurtle s a => STRef s a -> a
+twistedTurtle r = fromTwistedTurtle (TwistedTurtle r)
+
 instance TurtleLike self s => TurtleLike (TwistedTurtle s self) s where
     forward (TwistedTurtle r) d = readSTRef r >>= \ t -> forward t d
     turn (TwistedTurtle r) a  = readSTRef r >>= \ t -> turn t (-a)

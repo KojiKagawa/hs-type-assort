@@ -97,18 +97,19 @@ main1 = do
     x1 <- newSTRef 0.0
     y1 <- newSTRef 1.0
     t1 <- newSTRef pi
-    let turtle1 = Turtle x1 y1 t1
+    let turtle1 = fromTurtle $ Turtle x1 y1 t1
     x2 <- newSTRef (-1.0)
     y2 <- newSTRef 0.0
     t2 <- newSTRef 0.0
     c2 <- newSTRef 0x00ff0000
-    let turtle2 = ColorTurtle x2 y2 t2 c2
+    let turtle2 = fromColorTurtle $ ColorTurtle x2 y2 t2 c2
 --      turtle3 :: Cast (ColorTurtle RealWorld) self0 => TwistedTurtle self0
-    r2 <- newSTRef (fromColorTurtle turtle2)
+    r2 <- newSTRef ({- fromColorTurtle -} turtle2)
     let
-      turtle3 = TwistedTurtle ({- (id :: STRef s (AllTurtle s) -> STRef s (AllTurtle s))-} r2)
+      turtle3 = fromTwistedTurtle $ TwistedTurtle ({- (id :: STRef s (AllTurtle s) -> STRef s (AllTurtle s))-} r2)
       turtles = {- (id :: [AllTurtle s] -> [AllTurtle s]) -} 
-                [fromTurtle turtle1, fromColorTurtle turtle2, fromTwistedTurtle turtle3]
+                -- [fromTurtle turtle1, fromColorTurtle turtle2, fromTwistedTurtle turtle3]
+                [turtle1, turtle2, turtle3]
     mapM_ (\ t -> forward t 3.3) turtles
     x2' <- readSTRef x2
     y2' <- readSTRef y2
