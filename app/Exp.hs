@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskellQuotes #-}
 
 module Exp where
-import Carrefour(CastClass( CastFrom ) )
+import Carrefour(CastClass( CastFrom ))
 
 data Lit = Lit Double
 
