@@ -100,6 +100,7 @@ n1 `nameEq` (nb2, nm2, np2) =
 
 forDefaultToClasses :: ForDefault -> TcPluginM (TyCon, [Class])
 forDefaultToClasses (Derivings name types classes) = do
+    -- CastClass に属するアノテーションを取得する
     anns <- getAnnotationsForData :: TcPluginM (UniqFM GHC.Plugins.Name [CastClass])
     -- -- ts <- mapM nameOfMyName types
     -- tcPluginIO $ do
@@ -109,6 +110,7 @@ forDefaultToClasses (Derivings name types classes) = do
     --     -- putStrLn (show $ map getUnique ts)
     let anns2 :: [CastClass]
         anns2 = concat $ nonDetEltsUFM anns
+        -- classes2 -- データ型に対応している CastClass アノテーションをもつ型クラス名のリスト
         classes2 :: [MyName]
         classes2 = map (myNameOfName . classOfCast)  
                       $ concat $ map (\dn -> filter (\ cc -> sourceOfCast cc `nameEq` dn ) anns2) types
@@ -157,7 +159,8 @@ findProposal simples = do
     --     putStrLn "findProposal: -- preds"
     --     printSDocLn defaultSDocContext (PageMode False) stdout (ppr preds)
     anns <- getAnnotationsForData :: TcPluginM (UniqFM GHC.Plugins.Name [ForDefault])
-    let annList :: [ForDefault]
+    let -- ForDefault に属するアノテーションを取得する 
+        annList :: [ForDefault]
         annList = concat $ nonDetEltsUFM anns
     -- tcPluginIO $ do
     --     putStrLn "-- annotations"
@@ -187,7 +190,8 @@ findProposal simples = do
     ptcs :: [(Ct, Class, TcTyVar)]
     nonPtcs :: [Ct]
     (ptcs, nonPtcs) = partitionWith findPTC simples
-
+    -- Todo: nonPtcs から Cast クラスのものを取り出す
+    
     ptcGroups :: [NonEmpty (Ct, Class, TcTyVar)]
     ptcGroups       = equivClasses cmp_tv ptcs    
 
@@ -206,6 +210,7 @@ findProposal simples = do
     defaultable_classes classes cans = 
         map fst $ filter (\ (t, cs) -> classes `subset` cs) cans
 
+    -- cans の部分集合になっている型クラス群に対してデフォルトの型を提案する
     proposalOf :: [(TyCon, [Class])] -> [(TcTyVar, TyCon, [Ct])]
     proposalOf cans = [ (tv, t, map fstOf3 group) 
               | (group'@((_, _, tv) :| _), rest)  <- holes ptcGroups

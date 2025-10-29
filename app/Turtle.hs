@@ -3,13 +3,19 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE TemplateHaskellQuotes #-}
 
 module Turtle where
 
 import Control.Monad.ST
 import Data.STRef
+import Carrefour(CastClass( CastFrom ))
 
 data Turtle s = Turtle {x:: STRef s Double, y:: STRef s Double, t:: STRef s Double}
+
+class FromTurtle s a | a -> s where
+     fromTurtle :: Turtle s -> a
+{-# ANN type Turtle (CastFrom ''FromTurtle ''Turtle) #-}
 
 class TurtleLike a s | a -> s  where
    forward :: a -> Double -> ST s ()

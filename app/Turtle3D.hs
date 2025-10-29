@@ -3,12 +3,14 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE TemplateHaskellQuotes #-}
 
 module Turtle3D where 
 
 import Control.Monad.ST
 import Data.STRef
 import Turtle
+import Carrefour(CastClass( CastFrom ))
 
 type V3D = (Double, Double, Double)
 
@@ -18,6 +20,10 @@ data Turtle3D s = Turtle3D {
        r:: STRef s V3D,
        u:: STRef s V3D
      }
+
+class FromTurtle3D s a | a -> s where
+     fromTurtle3D :: Turtle3D s -> a
+{-# ANN type Turtle3D (CastFrom ''FromTurtle3D ''Turtle3D) #-}
 
 class Turtle3DLike a s | a -> s where
    bank  :: a -> Double -> ST s ()

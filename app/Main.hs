@@ -10,7 +10,7 @@
 
 module Main where
 
-import Carrefour( carrefour, Cast, ucast, dcast)
+import Carrefour(carrefour, Cast, ucast, dcast)
 
 import Turtle
 import ColorTurtle
@@ -104,10 +104,11 @@ main1 = do
     c2 <- newSTRef 0x00ff0000
     let turtle2 = ColorTurtle x2 y2 t2 c2
 --      turtle3 :: Cast (ColorTurtle RealWorld) self0 => TwistedTurtle self0
-    r2 <- newSTRef (ucast turtle2)
+    r2 <- newSTRef (fromColorTurtle turtle2)
     let
-      turtle3 = TwistedTurtle ((id :: STRef s (AllTurtle s) -> STRef s (AllTurtle s)) r2)
-      turtles = (id :: [AllTurtle s] -> [AllTurtle s]) [ucast turtle1, ucast turtle2, ucast turtle3]
+      turtle3 = TwistedTurtle ({- (id :: STRef s (AllTurtle s) -> STRef s (AllTurtle s))-} r2)
+      turtles = {- (id :: [AllTurtle s] -> [AllTurtle s]) -} 
+                [fromTurtle turtle1, fromColorTurtle turtle2, fromTwistedTurtle turtle3]
     mapM_ (\ t -> forward t 3.3) turtles
     x2' <- readSTRef x2
     y2' <- readSTRef y2
@@ -135,6 +136,16 @@ data assorted AllExp = Lit | Plus AllExp AllExp | Times AllExp AllExp
 |]
 -}
 
+-- Cast クラスからデフォルトを使うときに試す関数
+-- fromLit' :: Cast Lit a => Lit -> a
+-- fromLit' = ucast
+
+-- fromPlus' :: Cast (Plus a a) a => Plus a a -> a
+-- fromPlus' = ucast
+
+-- fromTimes' :: Cast (Times a a) a => Times a a -> a
+-- fromTimes' = ucast
+
 main2 = let -- ucast = toAllExp
             -- ucast' = toAllExp
 -- ucast' = ucast にすると 
@@ -148,6 +159,10 @@ main2 = let -- ucast = toAllExp
             -- exps = [ ucast (Lit 1.2)
             --        , ucast (Plus (cast' (Lit 3.4)) (cast' (Lit 7.8)))
             --        , ucast (Times (cast' (Lit 0.6)) (cast' (Plus (cast' (Lit (- 1.2))) (cast' (Lit 3.09))))) ]
+            -- -- Cast クラスからデフォルトを使うときに試す例
+            -- exps = [ fromLit' (Lit 1.2)
+            --        , fromPlus' (Plus (fromLit' (Lit 3.4)) (fromLit' (Lit 7.8)))
+            --        , fromTimes' (Times (fromLit' (Lit 0.6)) (fromPlus' (Plus (fromLit' (Lit (- 1.2))) (fromLit' (Lit 3.09))))) ]
             exps = [ fromLit (Lit 1.2)
                    , fromPlus (Plus (fromLit (Lit 3.4)) (fromLit (Lit 7.8)))
                    , fromTimes (Times (fromLit (Lit 0.6)) (fromPlus (Plus (fromLit (Lit (- 1.2))) (fromLit (Lit 3.09))))) ]

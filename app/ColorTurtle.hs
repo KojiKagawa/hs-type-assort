@@ -3,14 +3,20 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE TemplateHaskellQuotes #-}
 
 module ColorTurtle where
 
 import Control.Monad.ST
 import Data.STRef
 import Turtle
+import Carrefour(CastClass( CastFrom ))
 
 data ColorTurtle s = ColorTurtle {x:: STRef s Double, y:: STRef s Double, t:: STRef s Double, c:: STRef s Int}
+
+class FromColorTurtle s a | a -> s where
+     fromColorTurtle :: ColorTurtle s -> a
+{-# ANN type ColorTurtle (CastFrom ''FromColorTurtle ''ColorTurtle) #-}
 
 instance TurtleLike (ColorTurtle s) s where
    forward (ColorTurtle {x, y, t}) distance = do

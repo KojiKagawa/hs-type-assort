@@ -1,6 +1,8 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE TemplateHaskellQuotes #-}
 
 module TwistedTurtle where
 
@@ -9,8 +11,12 @@ import Data.STRef
 import Turtle
 import ColorTurtle
 import Turtle3D
+import Carrefour(CastClass( CastFrom ))
 
-newtype TwistedTurtle s self = TwistedTurtle (STRef s self)
+newtype TwistedTurtle s e = TwistedTurtle (STRef s e)
+class FromTwistedTurtle s a | a -> s where
+     fromTwistedTurtle :: TwistedTurtle s a -> a
+{-# ANN type TwistedTurtle (CastFrom ''FromTwistedTurtle ''TwistedTurtle) #-}
 
 instance TurtleLike self s => TurtleLike (TwistedTurtle s self) s where
     forward (TwistedTurtle r) d = readSTRef r >>= \ t -> forward t d

@@ -26,6 +26,9 @@ import Data.Maybe (catMaybes, mapMaybe)
 import Control.Monad (zipWithM)
 import GHC.Utils.Outputable as Outputable
 
+-- ucast . ucast などとされると途端にデフォルトを見つけられなくなるので、
+-- Cast クラスは一般ユーザーには使わせない方向で
+-- Todo: ただし、DefaultingPlugin から Cast τ α の τ は見えるようにする
 class Cast a b where
   ucast :: a -> b
   dcast :: b -> Maybe a
@@ -35,7 +38,8 @@ instance Cast a a where
   dcast = Just
 
 -- for ANN
-data CastClass = CastFrom Name Name | CastTo Name Name
+data CastClass = CastFrom Name {- クラス名 -} Name {- データ型名 -} 
+               | CastTo Name {- クラス名 -} Name {- データ型名 -}
                  deriving (Show, Data)
 
 sourceOfCast :: CastClass -> Name
@@ -58,7 +62,10 @@ myNameExpOfName name = let (base, mod, pkg) = myNameOfName name
           expOfMBString Nothing  = ConE 'Nothing
 
 -- for ANN
-data ForDefault = Derivings MyName [MyName] [MyName] deriving (Show, Data)
+-- 混成型を定義するときに、その情報を取り出しやすいようにするためのアノテーション
+data ForDefault = Derivings MyName{- データ型名 -} 
+                            [MyName]{- 構成のデータ型名 -} 
+                            [MyName]{- 型クラス名 -} deriving (Show, Data)
 
 instance Outputable CastClass where
   ppr (CastFrom name1 name2) = text "CastFrom" <+> Outputable.ppr name1 <+> text "to" <+> Outputable.ppr name2
@@ -301,6 +308,7 @@ defineAllSumData tyconName tvs conNames ds = do
   casts <- defineCastDecls tyconName tvs conNames ds
   pure (ret ++ casts)
 
+-- ForDefault アノテーションを追加する
 defineAnnotationForDefault :: Name -> [Type] -> [Type] -> Dec
 defineAnnotationForDefault tyconName ds cs = let
     dataNames = map (\ d -> let (dn, _) = dataHead d in dn) ds
