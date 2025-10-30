@@ -18,7 +18,7 @@ class FromColorTurtle s a | a -> s where
      fromColorTurtle :: ColorTurtle s -> a
 {-# ANN type ColorTurtle (CastFrom ''FromColorTurtle ''ColorTurtle) #-}
 
-instance TurtleLike (ColorTurtle s) s where
+instance Movable s (ColorTurtle s) where
    forward (ColorTurtle {x, y, t}) distance = do
         x0 <- readSTRef x
         y0 <- readSTRef y
@@ -30,11 +30,11 @@ instance TurtleLike (ColorTurtle s) s where
         t0 <- readSTRef t
         writeSTRef t (t0 + dt) 
 
-class HasColor a s | a -> s where
+class HasColor s a | a -> s where
    getColor :: a -> ST s Int
    setColor :: a -> Int -> ST s ()
 
-instance HasColor (ColorTurtle s) s where
+instance HasColor s (ColorTurtle s) where
    getColor (ColorTurtle {c}) = do
       readSTRef c
    setColor (ColorTurtle {c}) c1 = do

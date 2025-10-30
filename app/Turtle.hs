@@ -17,17 +17,15 @@ class FromTurtle s a | a -> s where
      fromTurtle :: Turtle s -> a
 {-# ANN type Turtle (CastFrom ''FromTurtle ''Turtle) #-}
 
-class TurtleLike a s | a -> s  where
+class Movable s a | a -> s  where
    forward :: a -> Double -> ST s ()
    turn    :: a -> Double -> ST s ()
-
--- renmei class TurtleLike a s :: AllTurtle s
 
 rotate t (x, y) =
     let c = cos t; s = sin t in
          (x * c - y * s, x * s + y *c)
 
-instance TurtleLike (Turtle s) s where
+instance Movable s (Turtle s) where
    forward (Turtle {x, y, t}) distance = do
         x0 <- readSTRef x
         y0 <- readSTRef y

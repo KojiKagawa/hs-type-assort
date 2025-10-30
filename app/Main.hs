@@ -30,7 +30,7 @@ import Data.Either
 
 [carrefour| 
 data assorted AllTurtle s = Turtle s | ColorTurtle s | Turtle3D s | TwistedTurtle s _Self 
-    deriving (TurtleLike _Self s, HasColor _Self s) 
+    deriving (Movable s _Self, HasColor s _Self) 
 |]
 
 {-
@@ -72,7 +72,7 @@ instance FromAllTurtle (TwistedTurtle.TwistedTurtle (AllTurtle s))
           fromAllTurtle _ = Nothing
 
 ---- defineInstance
-instance Turtle.TurtleLike (AllTurtle s) s
+instance Turtle.Movable s (AllTurtle s)
     where {forward (AllTurtle1 x1) = forward x1;
            forward (AllTurtle2 x1) = forward x1;
            forward (AllTurtle3 x1) = forward x1;

@@ -7,18 +7,18 @@ import ColorTurtle
 import Turtle3D
 import TwistedTurtle
 
-instance HasColor (Turtle s) s where
+instance HasColor s (Turtle s) where
    getColor _ = return 0
    setColor _ _ = return ()
 
-instance HasColor (Turtle3D s) s where
+instance HasColor s (Turtle3D s) where
    getColor _ = return 0
    setColor _ _ = return ()
 
-instance Turtle3DLike (Turtle s) s where
+instance Movable3D s (Turtle s) where
     bank _ _ = return ()
     pitch _ _ = return ()
 
-instance Turtle3DLike (ColorTurtle s) s where
+instance Movable3D s (ColorTurtle s) where
     bank _ _ = return ()
     pitch _ _ = return ()

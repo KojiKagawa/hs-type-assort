@@ -405,8 +405,8 @@ getDependentParams n = do
 
 -- getInstanceContext d c
 --   d:  type expression, e.g. TwistedTurtle _Self
---   c:  class constraint expression, e.g. TurtleLike _Self s
---   return: Cxt (e.g. [Pred]) for the class constraint, e.g. [TurtleLike _Self s]
+--   c:  class constraint expression, e.g. Movable s _Self
+--   return: Cxt (e.g. [Pred]) for the class constraint, e.g. [Movable s _Self]
 getInstanceContext :: Type -> Type -> Q Cxt
 getInstanceContext d c = do
   let (ConT n, ts) = typeFArgs c
@@ -435,12 +435,12 @@ getInstanceContext d c = do
 -- defineInstance typ nbase cs cstrs ds (c, ms)
 --  typ:      type expression, e.g. AllTurtle s
 --  nBase:    base name for the type, e.g. "AllTurtle"
---  cs:       class constraints, e.g. [TurtleLike _Self s, HasColor _Self s]
+--  cs:       class constraints, e.g. [Movable s _Self, HasColor s _Self]
 --  cstrs:    data constructor names, e.g. ["AllTurtle1", "AllTurtle2", ...]
---  ds:       data types, e.g. [Turtle s, ColorTurtle s, Turtle3D s, TwistedTurtle _Self]
---  (c, ms):  class name and its methods (e.g. (TurtleLike _Self s, [(forward, forward's type), (turn, turn's type), ...]))
+--  ds:       data types, e.g. [Turtle s, ColorTurtle s, Turtle3D s, TwistedTurtle s _Self]
+--  (c, ms):  class name and its methods (e.g. (Movable s _Self, [(forward, forward's type), (turn, turn's type), ...]))
 --  return:   the instance declaration, e.g.
---    instance TurtleLike (AllTurtle s) s where
+--    instance Movable s (AllTurtle s) where
 --        forward (AllTurtle1 t) = forward t
 --        forward (AllTurtle2 t) = forward t
 --        ...
@@ -470,7 +470,7 @@ defineInstance typ nBase cs cstrs ds (c, ms) = do
 -- typeCarrefour typ ds cs
 --   typ:  type expression, e.g. AllTurtle s
 --   ds:   data type expressions, e.g. [Turtle s, ColorTurtle s, Turtle3D s, TwistedTurtle _Self]
---   cs:   class constraints, e.g. [TurtleLike _Self s, HasColor _Self s]
+--   cs:   class constraints, e.g. [Movable s _Self, HasColor s _Self]
 --   return: [Dec] for the type, data constructors, and class instances
 typeCarrefour :: Type -> [Type] -> [Type] -> Q [Dec]
 typeCarrefour typ ds cs = do
@@ -508,7 +508,7 @@ replaceConst t  = pure t
 -- e.g. 
 -- [carrefour| 
 -- data AllTurtle s <- Turtle s | ColorTurtle s | Turtle3D s | TwistedTurtle _Self 
---    deriving (TurtleLike _Self s, HasColor _Self s) 
+--    deriving (Movable s _Self, HasColor s _Self) 
 -- |]
 carrefourDec :: String -> Q [Dec]
 carrefourDec s = do

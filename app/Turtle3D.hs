@@ -25,7 +25,7 @@ class FromTurtle3D s a | a -> s where
      fromTurtle3D :: Turtle3D s -> a
 {-# ANN type Turtle3D (CastFrom ''FromTurtle3D ''Turtle3D) #-}
 
-class Turtle3DLike a s | a -> s where
+class Movable3D s a | a -> s where
    bank  :: a -> Double -> ST s ()
    pitch :: a -> Double -> ST s ()
 
@@ -53,7 +53,7 @@ rotate3D v axis a =
         in v5
 rotate3D360 v axis deg = rotate3D v axis (deg / 180 * pi)
 
-instance TurtleLike (Turtle3D s) s where
+instance Movable s (Turtle3D s) where
    forward (Turtle3D {p, v}) d = do
       p0 <- readSTRef p
       v0 <- readSTRef v
@@ -70,8 +70,8 @@ instance TurtleLike (Turtle3D s) s where
      let r2 = normalize3D r1
      writeSTRef r r2
 
-instance Turtle3DLike (Turtle3D s) s where
-   bank  (Turtle3D {p, v, r, u}) angle = do
+instance Movable3D s (Turtle3D s) where
+   bank (Turtle3D {p, v, r, u}) angle = do
      d0 <- readSTRef v
      r0 <- readSTRef r
      let r1 = rotate3D360 r0 d0 angle
