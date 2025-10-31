@@ -18,6 +18,8 @@ class FromColorTurtle s a | a -> s where
      fromColorTurtle :: ColorTurtle s -> a
 {-# ANN type ColorTurtle (CastFrom ''FromColorTurtle ''ColorTurtle) #-}
 
+mkColorTurtle x y t c = fromColorTurtle $ ColorTurtle x y t c
+
 instance Movable s (ColorTurtle s) where
    forward (ColorTurtle {x, y, t}) distance = do
         x0 <- readSTRef x

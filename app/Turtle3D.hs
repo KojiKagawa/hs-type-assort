@@ -25,6 +25,8 @@ class FromTurtle3D s a | a -> s where
      fromTurtle3D :: Turtle3D s -> a
 {-# ANN type Turtle3D (CastFrom ''FromTurtle3D ''Turtle3D) #-}
 
+mkTurtle3D p v r u = fromTurtle3D $ Turtle3D p v r u
+
 class Movable3D s a | a -> s where
    bank  :: a -> Double -> ST s ()
    pitch :: a -> Double -> ST s ()

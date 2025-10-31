@@ -17,6 +17,8 @@ class FromTurtle s a | a -> s where
      fromTurtle :: Turtle s -> a
 {-# ANN type Turtle (CastFrom ''FromTurtle ''Turtle) #-}
 
+mkTurtle x y t = fromTurtle $ Turtle x y t
+
 class Movable s a | a -> s  where
    forward :: a -> Double -> ST s ()
    turn    :: a -> Double -> ST s ()
