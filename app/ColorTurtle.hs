@@ -10,7 +10,7 @@ module ColorTurtle where
 import Control.Monad.ST
 import Data.STRef
 import Turtle
-import Carrefour(CastClass( CastFrom ))
+import Assort(CastClass( CastFrom ))
 
 data ColorTurtle s = ColorTurtle {x:: STRef s Double, y:: STRef s Double, t:: STRef s Double, c:: STRef s Int}
 

@@ -64,8 +64,8 @@ dec = do
   symbol ")"
   pure (n, ts, cs)
 
-parseCarrefourDec :: MonadFail m => (String, Int, Int) -> String -> m (Type, [Type], [Type])
-parseCarrefourDec (file, line, col) s = do
+parseAssortDec :: MonadFail m => (String, Int, Int) -> String -> m (Type, [Type], [Type])
+parseAssortDec (file, line, col) s = do
   case runParser p () "" s of
     Left err -> fail (show err)
     Right d  -> pure d

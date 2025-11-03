@@ -9,7 +9,7 @@ module Turtle where
 
 import Control.Monad.ST
 import Data.STRef
-import Carrefour(CastClass( CastFrom ))
+import Assort(CastClass( CastFrom ))
 
 data Turtle s = Turtle {x:: STRef s Double, y:: STRef s Double, t:: STRef s Double}
 

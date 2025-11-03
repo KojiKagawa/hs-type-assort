@@ -11,7 +11,7 @@ import Data.STRef
 import Turtle
 import ColorTurtle
 import Turtle3D
-import Carrefour(CastClass( CastFrom ))
+import Assort(CastClass( CastFrom ))
 
 newtype TwistedTurtle s e = TwistedTurtle (STRef s e)
 class FromTwistedTurtle s a | a -> s where

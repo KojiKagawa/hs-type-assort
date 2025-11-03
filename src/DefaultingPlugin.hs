@@ -26,7 +26,7 @@ import GHC.Tc.Utils.TcType (isMetaTyVar, isTyConableTyVar)
 import GHC.Data.List.SetOps (equivClasses)
 import GHC.Types.SourceText (StringLiteral(..), SourceText(..))
 
-import Carrefour (ForDefault(..), CastClass(..), sourceOfCast, classOfCast, MyName, myNameOfName)
+import Assort (ForDefault(..), CastClass(..), sourceOfCast, classOfCast, MyName, myNameOfName)
 import MyTypeLib (dataHead)
 
 plugin :: Plugin
@@ -261,7 +261,7 @@ findPTCM cc = do
                         putStrLn "findPTCM: Zero or Multiple independent parameters: "
                         printSDocLn defaultSDocContext (PageMode False) stdout (ppr tys)
                     return (Right cc)
--- basically, reimplementation of getDependentParams in Carrefour.hs but for GHC.Core.Class
+-- basically, reimplementation of getDependentParams in Assort.hs but for GHC.Core.Class
 getIndependentParams :: Class -> [Bool]
 getIndependentParams cls = let
     (vars, deps) = classTvsFds cls

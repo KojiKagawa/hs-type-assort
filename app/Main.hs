@@ -10,7 +10,7 @@
 
 module Main where
 
-import Carrefour(carrefour, Cast, ucast, dcast)
+import Assort(assorted, Cast, ucast, dcast)
 
 import Turtle
 import ColorTurtle
@@ -28,7 +28,7 @@ import Control.Monad.ST
 import Data.STRef
 import Data.Either
 
-[carrefour| 
+[assorted| 
 data assorted AllTurtle s = Turtle s | ColorTurtle s | Turtle3D s | TwistedTurtle s _Self 
     deriving (Movable s _Self, HasColor s _Self) 
 |]
@@ -45,7 +45,7 @@ class ToAllTurtle _self s | _self -> s
 instance (ToAllTurtle a s,
           ToAllTurtle b s) => ToAllTurtle (Data.Either.Either a b) s
     where {toAllTurtle = Data.Either.either toAllTurtle toAllTurtle}
-instance ToAllTurtle a s => Carrefour.Cast a (AllTurtle s)
+instance ToAllTurtle a s => Assort.Cast a (AllTurtle s)
     where {ucast _self = toAllTurtle _self}
 instance ToAllTurtle (Turtle.Turtle s) s
     where {toAllTurtle = AllTurtle1}
@@ -93,7 +93,7 @@ instance ColorTurtle.HasColor (AllTurtle s) s
 
 main1 = do
   p <-  stToIO (do
-    -- putStrLn [carrefour| x |]
+    -- putStrLn [assorted| x |]
     x1 <- newSTRef 0.0
     y1 <- newSTRef 1.0
     t1 <- newSTRef pi
@@ -124,14 +124,14 @@ main1 = do
       (ToAllTurtle (TwistedTurtle self0) RealWorld, (Cast (ColorTurtle RealWorld) self0))
 -}
 
-[carrefour| 
+[assorted| 
 data assorted AllExp = Lit | Plus _Self _Self | Times _Self _Self
     deriving (Eval _Self, PPrint _Self, Pick0 _Self _Self _Self) 
 |]
 
 {-
 -- 以下の書き方でも可
-[carrefour| 
+[assorted| 
 data assorted AllExp = Lit | Plus AllExp AllExp | Times AllExp AllExp
     deriving (Eval AllExp, PPrint AllExp, Pick0 AllExp AllExp _Self) 
 |]

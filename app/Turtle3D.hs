@@ -10,7 +10,7 @@ module Turtle3D where
 import Control.Monad.ST
 import Data.STRef
 import Turtle
-import Carrefour(CastClass( CastFrom ))
+import Assort(CastClass( CastFrom ))
 
 type V3D = (Double, Double, Double)
 

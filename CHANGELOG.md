@@ -1,4 +1,4 @@
-# Revision history for hs-type-carrefour
+# Revision history for hs-type-assort
 
 ## 0.1.0.0 -- YYYY-mm-dd
 

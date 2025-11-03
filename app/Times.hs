@@ -2,7 +2,7 @@
 
 module Times where
 
-import Carrefour(CastClass( CastFrom ) )
+import Assort(CastClass( CastFrom ) )
 import Exp
 
 data Times s1 s2 = Times s1 s2
