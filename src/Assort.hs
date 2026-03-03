@@ -98,7 +98,7 @@ mkNames n s = map (mkName . (s ++) . show) [1..n]
 --   tyconName:  type constructor name, e.g. AllTurtle
 --   tvs:        type parameters, e.g. ["s"]
 --   conNames:   data constructor names, e.g. ["AllTurtle1", "AllTurtle2", ...]
---   ds:         data types, e.g. [Turtle s, ColorTurtle s, Turtle3D s, TwistedTurtle _Self]
+--   ds:         data types, e.g. [Turtle s, ColorTurtle s, Turtle3D s, TwistedTurtle s _Self]
 --   return: [Dec] for the To type class and its instances
 --   The To type class is defined as follows:
 --   1. classDecl
@@ -147,7 +147,7 @@ defineToDecls tyconName tvs conNames ds = let
 --   tyconName:  type constructor name, e.g. AllTurtle  
 --   tvs:        type parameters, e.g. ["s"]
 --   conNames:   data constructor names, e.g. ["AllTurtle1", "AllTurtle2", ...]
---   ds:         data types, e.g. [Turtle s, ColorTurtle s, Turtle3D s, TwistedTurtle _Self]
+--   ds:         data types, e.g. [Turtle s, ColorTurtle s, Turtle3D s, TwistedTurtle s _Self]
 --   return: [Dec] for the From type class and its instances
 --   The From type class is defined as follows:
 --   1. classDecl
@@ -295,7 +295,7 @@ defineCastDecls tyconName tvs conNames ds = do
 --   tyconName:  type constructor name, e.g. AllTurtle
 --   tvs:        type parameters, e.g. ["s"]
 --   conNames:   data constructor names, e.g. ["AllTurtle1", "AllTurtle2", ...]
---   ds:         data types, e.g. [Turtle s, ColorTurtle s, Turtle3D s, TwistedTurtle _Self]
+--   ds:         data types, e.g. [Turtle s, ColorTurtle s, Turtle3D s, TwistedTurtle s _]
 defineAllSumData :: Name -> [Name] -> [Name] -> [Type] -> Q [Dec]
 defineAllSumData tyconName tvs conNames ds = do
   let conDecls = zipWith (\ n t
@@ -318,8 +318,8 @@ defineAnnotationForDefault tyconName ds cs = let
   in annDecl
 
 -- countSelfArgs n t
---   n:  name of the type variable for Self, e.g. "_Self"
---   t:  type expression, e.g. "_Self -> _Self -> t"
+--   n:  name of the type variable for Self, e.g. "_"
+--   t:  type expression, e.g. "_ -> _ -> t"
 -- Self -> Self -> t    ===> (2, t)
 -- Self -> Self -> Self -> t ===> (3, t)
 countSelfArgs :: Name -> Type -> (Int, Type)
@@ -359,16 +359,16 @@ applyFMap (Just (Just e)) e1 = pure $ AppE e e1
 -- defineMethod nm cstrs (SigD n t)
 --  nm:     data constructor name, e.g. AllTurtle 
 --  cstrs:  data constructor names, e.g. ["C1", "C2", ...]
---  (SigD n t):  method signature, e.g. foo :: _Self -> _Self -> _Self
+--  (SigD n t):  method signature, e.g. foo :: _ -> _ -> _
 --  return: a method definition for all the combinations of data constructors
 --    --  e.g. foo (C1 x1) (C1 x2) = toAllTurtle (foo x1 x2)
 --    --       foo (C1 x1) (C2 x2) = toAllTurtle (foo x1 x2)
 --    --       ... for all the combinations of data constructors
 defineMethod :: String -> [Name] -> Dec -> Q (Maybe Dec)
 defineMethod nBase cstrs (SigD n t) = do
-  let (num1, t1) = countSelfArgs (mkName "_Self") t
-      {- sb = [ (mkName "__Self", VarT $ mkName "_Self") ] -} -- ここでだけ __Self と _Self を同一視
-  fmapFn <- mkFMap (mkName "_Self") ({- substType sb -} t1) (VarE $ mkName ("to" ++ nBase))
+  let (num1, t1) = countSelfArgs (mkName "_") t
+      {- sb = [ (mkName "__", VarT $ mkName "_") ] -} -- ここでだけ __ と _ を同一視
+  fmapFn <- mkFMap (mkName "_") ({- substType sb -} t1) (VarE $ mkName ("to" ++ nBase))
   ret <- applyFMap fmapFn $ foldl AppE (VarE n) (map VarE (mkNames num1 "x"))
   let pats = mkPatterns num1 cstrs
       ds = map (\ ps -> Clause ps {- Body -}(NormalB ret) [{-Dec-}]) pats
@@ -404,9 +404,9 @@ getDependentParams n = do
             in loop deps' (acc ++ ds)
 
 -- getInstanceContext d c
---   d:  type expression, e.g. TwistedTurtle _Self
---   c:  class constraint expression, e.g. Movable s _Self
---   return: Cxt (e.g. [Pred]) for the class constraint, e.g. [Movable s _Self]
+--   d:  type expression, e.g. TwistedTurtle s _
+--   c:  class constraint expression, e.g. Movable s _
+--   return: Cxt (e.g. [Pred]) for the class constraint, e.g. [Movable s _]
 getInstanceContext :: Type -> Type -> Q Cxt
 getInstanceContext d c = do
   let (ConT n, ts) = typeFArgs c
@@ -415,10 +415,10 @@ getInstanceContext d c = do
   -- runIO $ print d
   ts1 <- zipWithM (\ flag t -> if flag then do
                                               n <- newName "__s"
-                                              pure $ substType [(mkName "_Self", VarT n)] t
+                                              pure $ substType [(mkName "_", VarT n)] t
                                             -- 依存している型変数の中の Self は新しい型変数に置き換える
-                                       else pure $ substType [(mkName "_Self", d)] t) 
-                    flags ts -- (Obsolete) ここでは __Self と _Self を同一視しない
+                                       else pure $ substType [(mkName "_", d)] t) 
+                    flags ts -- (Obsolete) ここでは __ と _ を同一視しない
   let c1  = foldl AppT (ConT n) ts1
   insts <- reifyInstances n ts1
   -- runIO $ print insts
@@ -458,8 +458,8 @@ defineInstance typ nBase cs cstrs ds (c, ms) = do
   -- 
   -- d や cs, ms の中で _Self の代わりに型名（e.g. AllTurtle s）が使われても対応できるようにする
   -- Todo: constructor class （e.g. Functor AllTurtle）のように、unsaturated の場合にも対応できるように
-  let rev = [(typ, VarT $ mkName "_Self")]
-      s = [(mkName "_Self", typ){- , (mkName "__Self", typ) -}]
+  let rev = [(typ, VarT $ mkName "_")]
+      s = [(mkName "_", typ){- , (mkName "__Self", typ) -}]
   cxtss <- mapM (flip getInstanceContext (replaceType rev c) . replaceType rev) ds
   mdecs <- mapM (defineMethod nBase cstrs) ms
   let cxts = nub (map (substType s) (concat cxtss)) \\ cs
@@ -469,8 +469,8 @@ defineInstance typ nBase cs cstrs ds (c, ms) = do
 
 -- typeAssort typ ds cs
 --   typ:  type expression, e.g. AllTurtle s
---   ds:   data type expressions, e.g. [Turtle s, ColorTurtle s, Turtle3D s, TwistedTurtle _Self]
---   cs:   class constraints, e.g. [Movable s _Self, HasColor s _Self]
+--   ds:   data type expressions, e.g. [Turtle s, ColorTurtle s, Turtle3D s, TwistedTurtle s _]
+--   cs:   class constraints, e.g. [Movable s _, HasColor s _]
 --   return: [Dec] for the type, data constructors, and class instances
 typeAssort :: Type -> [Type] -> [Type] -> Q [Dec]
 typeAssort typ ds cs = do
@@ -478,8 +478,8 @@ typeAssort typ ds cs = do
       nBase = nameBase n
       tyconName = mkName nBase
       consts  = mkNames (length ds) nBase
-      s = [(mkName "_Self", typ)]
-      rev = [(typ, VarT $ mkName "_Self")]
+      s = [(mkName "_", typ)]
+      rev = [(typ, VarT $ mkName "_")]
       ds1 = map (substType s) ds
       annDecl = defineAnnotationForDefault tyconName ds cs
 --  runIO $ putStrLn "---- defineAllSumData"
@@ -507,8 +507,8 @@ replaceConst t  = pure t
 
 -- e.g. 
 -- [assorted| 
--- data AllTurtle s <- Turtle s | ColorTurtle s | Turtle3D s | TwistedTurtle _Self 
---    deriving (Movable s _Self, HasColor s _Self) 
+-- data AllTurtle s <- Turtle s | ColorTurtle s | Turtle3D s | TwistedTurtle s _ 
+--    deriving (Movable s _, HasColor s _) 
 -- |]
 assortDec :: String -> Q [Dec]
 assortDec s = do

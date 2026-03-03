@@ -29,8 +29,8 @@ import Data.STRef
 import Data.Either
 
 [assorted| 
-data assorted AllTurtle s = Turtle s | ColorTurtle s | Turtle3D s | TwistedTurtle s _Self 
-    deriving (Movable s _Self, HasColor s _Self) 
+data assorted AllTurtle s = Turtle s | ColorTurtle s | Turtle3D s | TwistedTurtle s _ 
+    deriving (Movable s _, HasColor s _) 
 |]
 
 {-
@@ -125,15 +125,15 @@ main1 = do
 -}
 
 [assorted| 
-data assorted AllExp = Lit | Plus _Self _Self | Times _Self _Self
-    deriving (Eval _Self, PPrint _Self, Pick0 _Self _Self _Self) 
+data assorted AllExp = Lit | Plus _ _ | Times _ _
+    deriving (Eval _, PPrint _, Pick0 _ _ _) 
 |]
 
 {-
 -- 以下の書き方でも可
 [assorted| 
 data assorted AllExp = Lit | Plus AllExp AllExp | Times AllExp AllExp
-    deriving (Eval AllExp, PPrint AllExp, Pick0 AllExp AllExp _Self) 
+    deriving (Eval AllExp, PPrint AllExp, Pick0 AllExp AllExp _) 
 |]
 -}
 
