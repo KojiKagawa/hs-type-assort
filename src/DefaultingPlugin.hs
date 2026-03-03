@@ -261,6 +261,7 @@ findPTCM cc = do
                         putStrLn "findPTCM: Zero or Multiple independent parameters: "
                         printSDocLn defaultSDocContext (PageMode False) stdout (ppr tys)
                     return (Right cc)
+                    
 -- basically, reimplementation of getDependentParams in Assort.hs but for GHC.Core.Class
 getIndependentParams :: Class -> [Bool]
 getIndependentParams cls = let
